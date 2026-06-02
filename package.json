@@ -5,6 +5,7 @@
   "description": "macOS debugger for React Native — Console, Sources, Network, Performance, Memory, Redux, AsyncStorage, React tree. Supports RN 0.74+ with Hermes and New Architecture.",
   "main": "main.js",
   "bin": {
+    "rn-debugger-app": "./bin/cli.js",
     "rn-debugger": "./bin/cli.js",
     "rn-debugger-setup": "./bin/setup.js"
   },
