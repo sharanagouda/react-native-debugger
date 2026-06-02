@@ -1,14 +1,14 @@
-# Privacy Policy — RN Debugger
+# Privacy Policy — ReactoRadar
 
 **Last updated:** June 2, 2026
 
 ## Overview
 
-RN Debugger is a local development tool for debugging React Native applications. It runs entirely on your machine and does not collect, transmit, or store any personal data.
+ReactoRadar is a local development tool for debugging React Native applications. It runs entirely on your machine and does not collect, transmit, or store any personal data.
 
 ## Data Collection
 
-**RN Debugger does not collect any data.** Specifically:
+**ReactoRadar does not collect any data.** Specifically:
 
 - No analytics or telemetry
 - No crash reporting to external servers
@@ -21,7 +21,7 @@ RN Debugger is a local development tool for debugging React Native applications.
 
 All communication happens **locally on your machine** between:
 
-- The RN Debugger app (Electron) — runs on `localhost`
+- The ReactoRadar app (Electron) — runs on `localhost`
 - Your React Native app (via RNDebugSDK) — connects via WebSocket to `localhost`
 - Metro bundler — accessed at `localhost:8081`
 
@@ -41,16 +41,16 @@ All of this data exists only in the app's memory while it's running. Nothing is 
 
 ## Third-Party Services
 
-RN Debugger does not integrate with any third-party services. The only external network requests are:
+ReactoRadar does not integrate with any third-party services. The only external network requests are:
 
 - **Google Fonts** — loaded in the UI for the JetBrains Mono and Syne typefaces
-- **npm registry** — only when you run `npx rn-debugger-app` to install/update
+- **npm registry** — only when you run `npx reactoradar` to install/update
 
 ## App Store
 
 This app is not distributed through the Apple App Store. It is available as:
 
-- An npm package: `npx rn-debugger-app`
+- An npm package: `npx reactoradar`
 - A `.dmg` download from [GitHub Releases](https://github.com/sharanagouda/react-native-debugger/releases)
 - Source code on [GitHub](https://github.com/sharanagouda/react-native-debugger)
 

@@ -1,4 +1,4 @@
-# RN Debugger — macOS Desktop App
+# ReactoRadar — macOS Desktop App
 
 > React Native 0.74+ | Hermes | New Architecture | No Flipper replacement needed
 
@@ -297,7 +297,7 @@ If using Reactotron, set `networking: false` in ReactotronConfig to avoid `XHRIn
 
 ```bash
 npm run build
-# Output: dist/RN Debugger-1.0.0.dmg
+# Output: dist/ReactoRadar-1.0.0.dmg
 ```
 
 Requirements:
