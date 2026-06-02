@@ -24,26 +24,16 @@ let reduxClients   = new Set();
 let storageClients = new Set();
 let networkClients = new Set();
 
+// ─── Set dock icon ASAP (before app ready) ──────────────────────────────────
+const _appIcon = nativeImage.createFromPath(path.join(__dirname, 'ReactoRadar.png'));
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
-  // Theme will be set by renderer via IPC once it reads localStorage
   nativeTheme.themeSource = 'dark';
 
-  // Set dock icon on macOS — use icns for proper scaling
-  if (process.platform === 'darwin') {
-    try {
-      const icnsPath = path.join(__dirname, 'ReactoRadar.icns');
-      const pngPath = path.join(__dirname, 'ReactoRadar.png');
-      const fs = require('fs');
-      // Prefer .icns (handles dock scaling correctly), fallback to .png
-      const iconPath = fs.existsSync(icnsPath) ? icnsPath : pngPath;
-      const icon = nativeImage.createFromPath(iconPath);
-      if (!icon.isEmpty()) {
-        app.dock.setIcon(icon);
-      }
-    } catch (e) {
-      console.warn('[Icon] Failed to set dock icon:', e.message);
-    }
+  // Set dock icon on macOS
+  if (process.platform === 'darwin' && !_appIcon.isEmpty()) {
+    try { app.dock.setIcon(_appIcon); } catch {}
   }
 
   await createMainWindow();
@@ -96,7 +86,7 @@ async function createMainWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
     },
-    icon: nativeImage.createFromPath(path.join(__dirname, 'ReactoRadar.icns')),
+    icon: _appIcon,
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
