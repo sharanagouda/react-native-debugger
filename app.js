@@ -1444,6 +1444,7 @@ function initGA4Panel() {
   $('ga4Search').addEventListener('input', (e) => {
     ga4State.searchFilter = e.target.value.toLowerCase().trim();
     renderGA4List();
+    renderGA4Summary(); // update active chip highlight
   });
 
   $('ga4SortBtn').addEventListener('click', () => {
@@ -1626,12 +1627,35 @@ function renderGA4Summary() {
   });
 
   const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  const top = sorted.slice(0, 8);
-  const topHtml = top.map(([name, count]) =>
-    `<span class="ga4-summary-item"><b>${esc(name)}</b>: ${count}</span>`
-  ).join('');
 
-  summary.innerHTML = `<span class="ga4-summary-label">Total: ${ga4State.events.length}</span>${topHtml}`;
+  summary.innerHTML = '';
+
+  const totalLabel = document.createElement('span');
+  totalLabel.className = 'ga4-summary-label';
+  totalLabel.textContent = `Total: ${ga4State.events.length}`;
+  summary.appendChild(totalLabel);
+
+  sorted.forEach(([name, count]) => {
+    const chip = document.createElement('span');
+    const isActive = ga4State.searchFilter === name.toLowerCase();
+    chip.className = 'ga4-summary-chip' + (isActive ? ' active' : '');
+    chip.innerHTML = `<b>${esc(name)}</b><span class="chip-count">${count}</span>`;
+    chip.addEventListener('click', () => {
+      const search = $('ga4Search');
+      if (isActive) {
+        // Clear filter
+        ga4State.searchFilter = '';
+        if (search) search.value = '';
+      } else {
+        // Set filter to this event name
+        ga4State.searchFilter = name.toLowerCase();
+        if (search) search.value = name;
+      }
+      renderGA4List();
+      renderGA4Summary();
+    });
+    summary.appendChild(chip);
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

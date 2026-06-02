@@ -1358,19 +1358,35 @@ mark { background: rgba(79,172,255,.2); color: var(--accent); border-radius: 2px
 .ga4-summary {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   padding: 6px 14px;
   background: var(--bg2);
   border-top: 1px solid var(--border);
   font-size: 10px;
   color: var(--text-dim);
   flex-shrink: 0;
-  flex-wrap: wrap;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
 }
+.ga4-summary::-webkit-scrollbar { height: 3px; }
+.ga4-summary::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 .ga4-summary-label { font-weight: 600; color: var(--text-mid); flex-shrink: 0; }
-.ga4-summary-item { flex-shrink: 0; }
-.ga4-summary-item b { color: var(--text); font-weight: 500; }
+.ga4-summary-chip {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border2);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.ga4-summary-chip:hover { border-color: var(--accent); color: var(--accent); }
+.ga4-summary-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ga4-summary-chip b { font-weight: 500; color: var(--text); }
+.ga4-summary-chip.active b { color: #fff; }
+.ga4-summary-chip .chip-count { color: var(--text-dim); margin-left: 3px; }
+.ga4-summary-chip.active .chip-count { color: rgba(255,255,255,0.7); }
 
 /* ── LIGHT THEME OVERRIDES ───────────────────────────────────────────────────── */
 [data-theme="light"] .tb-btn.primary {
