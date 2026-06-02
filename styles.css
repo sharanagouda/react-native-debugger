@@ -19,7 +19,7 @@
   --yellow:      #f5c842;
   --red:         #ff5e72;
   --orange:      #ff8c42;
-  --sidebar-w:   56px;
+  --sidebar-w:   62px;
   --titlebar-h:  44px;
   --app-font-size: 12px;
 }
@@ -327,21 +327,21 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  width: 48px;
+  width: 54px;
   padding: 8px 4px;
   border-radius: 8px;
   border: none;
   background: transparent;
   color: var(--text-dim);
   font-family: inherit;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.3px;
   text-transform: uppercase;
   cursor: pointer;
   transition: all 0.15s;
 }
-.nav-btn svg { width: 18px; height: 18px; }
+.nav-btn svg { width: 20px; height: 20px; }
 .nav-btn:hover { background: var(--bg3); color: var(--text-mid); }
 .nav-btn.active { background: var(--bg4); color: var(--accent); }
 
