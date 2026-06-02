@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Menu, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell, nativeTheme, nativeImage } = require('electron');
 const path = require('path');
 const http = require('http');
 const { WebSocketServer, WebSocket } = require('ws');
@@ -30,8 +30,15 @@ app.whenReady().then(async () => {
 
   // Set dock icon on macOS
   if (process.platform === 'darwin') {
-    const iconPath = path.join(__dirname, 'rn_debuggerIcon.png');
-    try { app.dock.setIcon(iconPath); } catch {}
+    try {
+      const iconPath = path.join(__dirname, 'rn_debuggerIcon.png');
+      const icon = nativeImage.createFromPath(iconPath);
+      if (!icon.isEmpty()) {
+        app.dock.setIcon(icon);
+      }
+    } catch (e) {
+      console.warn('[Icon] Failed to set dock icon:', e.message);
+    }
   }
 
   await createMainWindow();
@@ -75,7 +82,7 @@ async function createMainWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
     },
-    icon: path.join(__dirname, 'rn_debuggerIcon.png'),
+    icon: nativeImage.createFromPath(path.join(__dirname, 'rn_debuggerIcon.png')),
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
