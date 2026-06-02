@@ -1,7 +1,7 @@
 {
   "name": "rn-debugger-app",
   "productName": "RN Debugger",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "macOS debugger for React Native — Console, Sources, Network, Performance, Memory, Redux, AsyncStorage, React tree. Supports RN 0.74+ with Hermes and New Architecture.",
   "main": "main.js",
   "bin": {
