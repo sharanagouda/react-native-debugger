@@ -477,7 +477,7 @@ try {
   const DevSettings = NativeModules?.DevSettings;
   if (DevSettings && typeof DevSettings.setIsDebuggingRemotely !== 'function') {
     DevSettings.setIsDebuggingRemotely = () => {
-      _console.warn('[RNDebugSDK] "Debug JS Remotely" is not available on Hermes. Use "Open DevTools" instead — it will open in the RN Debugger app.');
+      _console.warn('[RNDebugSDK] "Debug JS Remotely" is not available on Hermes. Use "Open DevTools" instead — it will open in the ReactoRadar app.');
     };
   }
 } catch {}
@@ -530,7 +530,7 @@ try {
 })();
 
 // Note: "Open DevTools" in the simulator dev menu opens Chrome/Metro's built-in debugger.
-// To debug JS in the RN Debugger app instead, press Cmd+D in the debugger app
+// To debug JS in the ReactoRadar app instead, press Cmd+D in the debugger app
 // or click the "JS Debugger" button. Both can coexist — they connect to the
 // same Hermes CDP target independently.
 

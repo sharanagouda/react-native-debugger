@@ -1727,6 +1727,26 @@ function setStoredFontSize(s) {
   try { localStorage.setItem('rn-debug-fontsize', String(s)); } catch {}
 }
 
+function getStoredAppName() {
+  try { return localStorage.getItem('rn-debug-appname') || 'ReactoRadar'; } catch { return 'ReactoRadar'; }
+}
+function setStoredAppName(n) {
+  try { localStorage.setItem('rn-debug-appname', n); } catch {}
+}
+function applyAppName(name) {
+  const logo = document.querySelector('.logo');
+  if (logo) {
+    // Split name — first part normal, last word in accent span
+    const words = name.split(/(?=[A-Z])/);
+    if (words.length >= 2) {
+      logo.innerHTML = words.slice(0, -1).join('') + '<span>' + words[words.length - 1] + '</span>';
+    } else {
+      logo.textContent = name;
+    }
+  }
+  document.title = name;
+}
+
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   // Tell main process (light themes need light nativeTheme for window chrome)
@@ -1772,6 +1792,16 @@ function initSettingsPanel() {
               <button class="font-size-btn" id="fontSizeDown">A-</button>
               <span class="font-size-display" id="fontSizeDisplay">${currentSize}px</span>
               <button class="font-size-btn" id="fontSizeUp">A+</button>
+            </div>
+           </div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label">App Name</div>
+              <div class="settings-hint">Customize the app title (visible in titlebar)</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input id="appNameInput" class="net-search-input" style="width:140px;text-align:center" value="${getStoredAppName()}" />
+              <button class="font-size-btn" id="appNameReset" title="Reset to default">Reset</button>
             </div>
           </div>
         </div>
@@ -1821,20 +1851,19 @@ function initSettingsPanel() {
           <div class="settings-section-title">How to Use</div>
           <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
             <div class="settings-hint" style="line-height:1.8">
-              <b style="color:var(--text)">1. Setup</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx rn-debugger setup</code> from your RN project<br/>
-              <b style="color:var(--text)">2. Start</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx rn-debugger</code> to launch this app<br/>
-              <b style="color:var(--text)">3. Run your app</b> — <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx react-native run-ios</code><br/>
+              <b style="color:var(--text)">1. Setup</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx rn-debugger-app setup</code> from your RN project<br/>
+              <b style="color:var(--text)">2. Start</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx rn-debugger-app</code> or open ReactoRadar.app<br/>
+              <b style="color:var(--text)">3. Run your app</b> — <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx react-native start --reset-cache</code><br/>
               <b style="color:var(--text)">4. Debug</b> — Console, Network, Redux data flows automatically<br/>
-              <b style="color:var(--text)">5. Sources</b> — Browse files in Sources tab, click Breakpoints for step debugging<br/>
-              <b style="color:var(--text)">6. Remove</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx rn-debugger remove</code> to clean uninstall
+              <b style="color:var(--text)">5. Remove</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx rn-debugger-app remove</code> to clean uninstall
             </div>
           </div>
         </div>
         <div class="settings-section">
           <div class="settings-section-title">About</div>
           <div class="settings-about">
-            <div class="about-name">RN Debugger</div>
-            <div class="about-version">v1.0.0</div>
+            <div class="about-name" id="aboutAppName">${getStoredAppName()}</div>
+            <div class="about-version">v1.2.0</div>
             <div class="about-desc">A standalone macOS debugger for React Native apps.<br/>Supports Hermes, New Architecture, and React Native 0.74+.</div>
             <div class="about-links" style="display:flex;gap:16px;justify-content:center">
               <span class="about-link" id="linkGithub">GitHub</span>
@@ -1889,6 +1918,18 @@ function initSettingsPanel() {
     window.electronAPI?.openExternal('https://github.com/sharanagouda/react-native-debugger#readme');
   });
 
+  // App name
+  $('appNameInput').addEventListener('change', (e) => {
+    const name = e.target.value.trim() || 'ReactoRadar';
+    setStoredAppName(name);
+    applyAppName(name);
+  });
+  $('appNameReset').addEventListener('click', () => {
+    setStoredAppName('ReactoRadar');
+    $('appNameInput').value = 'ReactoRadar';
+    applyAppName('ReactoRadar');
+  });
+
   // Font size controls
   $('fontSizeDown').addEventListener('click', () => {
     let size = getStoredFontSize();
@@ -1904,9 +1945,10 @@ function initSettingsPanel() {
   });
 }
 
-// Apply saved theme + font size on load
+// Apply saved theme + font size + app name on load
 applyTheme(getStoredTheme());
 applyFontSize(getStoredFontSize());
+applyAppName(getStoredAppName());
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SOURCES PANEL — CDP-based file browser + breakpoints

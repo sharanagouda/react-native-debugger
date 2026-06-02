@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * RN Debugger — Auto Setup
+ * ReactoRadar — Auto Setup
  *
  * Usage:
  *   node bin/setup.js <path-to-rn-project>   # install into RN project
@@ -137,7 +137,7 @@ function findStoreFile(projectDir) {
 async function install(projectDir) {
   const debuggerDir = path.resolve(__dirname, '..');
 
-  title('RN Debugger — Auto Setup');
+  title('ReactoRadar — Auto Setup');
   console.log();
 
   // 1. Validate RN project
@@ -305,7 +305,7 @@ ${SDK_MARKER_END}
   if (fileExists(gitignorePath)) {
     const gitignore = fs.readFileSync(gitignorePath, 'utf8');
     if (!gitignore.includes('RNDebugSDK')) {
-      fs.appendFileSync(gitignorePath, '\n# RN Debugger SDK (dev only)\nsrc/debug/RNDebugSDK.js\n');
+      fs.appendFileSync(gitignorePath, '\n# ReactoRadar SDK (dev only)\nsrc/debug/RNDebugSDK.js\n');
       log('Added RNDebugSDK.js to .gitignore');
     }
   }
@@ -318,11 +318,11 @@ ${SDK_MARKER_END}
   if (entryFile) console.log(C.dim + '    ~ ' + entryFile + '                (entry patched)' + C.reset);
   console.log();
   // Check if .dmg app is installed
-  const dmgInstalled = require('fs').existsSync('/Applications/RN Debugger.app');
+  const dmgInstalled = require('fs').existsSync('/Applications/ReactoRadar.app');
 
   console.log(C.bold + '  Next steps:' + C.reset);
   if (dmgInstalled) {
-    console.log('    1. Start the debugger:  ' + C.cyan + 'open "/Applications/RN Debugger.app"' + C.reset);
+    console.log('    1. Start the debugger:  ' + C.cyan + 'open "/Applications/ReactoRadar.app"' + C.reset);
   } else {
     console.log('    1. Start the debugger:  ' + C.cyan + 'npx rn-debugger-app' + C.reset);
     console.log('       ' + C.dim + '(or download .dmg from https://github.com/sharanagouda/react-native-debugger/releases)' + C.reset);
@@ -330,7 +330,7 @@ ${SDK_MARKER_END}
   console.log('    2. Run your RN app:     ' + C.cyan + 'npx react-native start --reset-cache' + C.reset);
   console.log('    3. Console, Network, Storage auto-connect');
   console.log();
-  console.log(C.bold + '  Tip: Open DevTools from simulator → launches RN Debugger (not Chrome):' + C.reset);
+  console.log(C.bold + '  Tip: Open DevTools from simulator → launches ReactoRadar (not Chrome):' + C.reset);
   console.log('    ' + C.cyan + 'BROWSER=' + path.join(debuggerDir, 'bin/open-debugger.sh') + ' npx react-native start' + C.reset);
   console.log();
   if (platform.hasAndroidDevice || platform.hasAndroidEmu) {
@@ -344,7 +344,7 @@ ${SDK_MARKER_END}
 
 // ─── Uninstall ───────────────────────────────────────────────────────────────
 function uninstall(projectDir) {
-  title('RN Debugger — Uninstall');
+  title('ReactoRadar — Uninstall');
   console.log();
 
   // Remove SDK file
@@ -412,7 +412,7 @@ function uninstall(projectDir) {
   const gitignorePath = path.join(projectDir, '.gitignore');
   if (fileExists(gitignorePath)) {
     let gitignore = fs.readFileSync(gitignorePath, 'utf8');
-    const cleaned = gitignore.replace(/\n# RN Debugger SDK \(dev only\)\nsrc\/debug\/RNDebugSDK\.js\n?/g, '');
+    const cleaned = gitignore.replace(/\n# ReactoRadar SDK \(dev only\)\nsrc\/debug\/RNDebugSDK\.js\n?/g, '');
     if (cleaned !== gitignore) {
       fs.writeFileSync(gitignorePath, cleaned);
       log('Removed from .gitignore');
@@ -443,7 +443,7 @@ async function main() {
     } else {
       // Not in an RN project — show help
       console.log();
-      console.log(C.bold + '  RN Debugger — Setup CLI' + C.reset);
+      console.log(C.bold + '  ReactoRadar — Setup CLI' + C.reset);
       console.log();
       console.log('  Run from inside your React Native project:');
       console.log('    ' + C.cyan + 'node /path/to/rn-debug-app/bin/setup.js' + C.reset);

@@ -15,7 +15,7 @@ const appDir = path.resolve(__dirname, '..');
 
 function printHelp() {
   console.log();
-  console.log(C.bold + C.magenta + '  RN Debugger' + C.reset + ' — React Native debugging tool');
+  console.log(C.bold + C.magenta + '  ReactoRadar' + C.reset + ' — React Native debugging tool');
   console.log();
   console.log('  Usage:');
   console.log(`    ${C.cyan}npx rn-debugger${C.reset}              Launch the debugger app`);
@@ -41,7 +41,7 @@ switch (command) {
       console.log(C.yellow + '  Installing electron...' + C.reset);
       execSync('npm install', { cwd: appDir, stdio: 'inherit' });
     }
-    console.log(C.green + '  Launching RN Debugger...' + C.reset);
+    console.log(C.green + '  Launching ReactoRadar...' + C.reset);
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
     const electronPath = path.join(appDir, 'node_modules', '.bin', 'electron');

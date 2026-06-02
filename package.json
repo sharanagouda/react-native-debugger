@@ -1,6 +1,6 @@
 {
   "name": "rn-debugger-app",
-  "productName": "RN Debugger",
+  "productName": "ReactoRadar",
   "version": "1.2.0",
   "description": "macOS debugger for React Native — Console, Sources, Network, Performance, Memory, Redux, AsyncStorage, React tree. Supports RN 0.74+ with Hermes and New Architecture.",
   "main": "main.js",
@@ -60,7 +60,7 @@
   },
   "build": {
     "appId": "com.yourteam.rn-debugger",
-    "productName": "RN Debugger",
+    "productName": "ReactoRadar",
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "rn_debuggerIcon.png",
