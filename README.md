@@ -23,14 +23,14 @@
 
 ### Console — Interactive Log Viewer
 <p align="center">
-  <img src="screenshots/consoleLogs.png" alt="Console Panel" width="800" />
+  <img src="https://raw.githubusercontent.com/sharanagouda/react-native-debugger/main/screenshots/consoleLogs.png" alt="Console Panel" width="800" />
 </p>
 
 *Collapsible object trees, level filters (Log/Info/Warn/Error), search, right-click to copy*
 
 ### Network — Chrome DevTools-style Inspector
 <p align="center">
-  <img src="screenshots/networkLogs.png" alt="Network Panel" width="800" />
+  <img src="https://raw.githubusercontent.com/sharanagouda/react-native-debugger/main/screenshots/networkLogs.png" alt="Network Panel" width="800" />
 </p>
 
 *Resizable/sortable columns, request/response detail, Copy as cURL, throttling*
