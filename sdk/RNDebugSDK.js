@@ -530,78 +530,64 @@ try {
 })();
 
 // ─── GA4 / Firebase Analytics Interceptor ────────────────────────────────────
-// Intercepts @react-native-firebase/analytics logEvent calls and sends event
-// data to the debugger for the GA4 Event Inspector panel.
+// Intercepts @react-native-firebase/analytics logEvent calls.
+// The analytics() function returns a new instance each time, so we patch the
+// PROTOTYPE of the analytics module class, not individual instances.
 (function setupGA4Interceptor() {
-  // Delay to ensure firebase module is loaded (import hoisting)
-  setTimeout(() => {
+  function patchAnalytics() {
     try {
       const analyticsModule = require('@react-native-firebase/analytics');
-      if (!analyticsModule) return;
+      if (!analyticsModule) return false;
 
-      const analyticsInstance = analyticsModule.default ? analyticsModule.default() : analyticsModule();
-      if (!analyticsInstance || !analyticsInstance.logEvent) return;
-      if (analyticsInstance.__reactoRadarPatched) return;
-      analyticsInstance.__reactoRadarPatched = true;
+      // Get the default export (the analytics factory function)
+      const analyticsFn = analyticsModule.default || analyticsModule;
+      if (typeof analyticsFn !== 'function') return false;
 
-      const _origLogEvent = analyticsInstance.logEvent.bind(analyticsInstance);
-      analyticsInstance.logEvent = function(eventName, params) {
-        // Send to debugger
+      // Create one instance to get access to its prototype
+      const instance = analyticsFn();
+      if (!instance || !instance.logEvent) return false;
+
+      const proto = Object.getPrototypeOf(instance);
+      if (!proto || proto.__reactoRadarPatched) return false;
+      proto.__reactoRadarPatched = true;
+
+      // Patch logEvent on the prototype — affects ALL instances
+      const _origLogEvent = proto.logEvent;
+      proto.logEvent = function(eventName, params) {
         try {
           let safeParams = params;
           if (params && typeof params === 'object') {
-            try { safeParams = JSON.parse(JSON.stringify(params)); } catch { safeParams = String(params); }
+            try { safeParams = JSON.parse(JSON.stringify(params)); } catch { safeParams = {}; }
           }
-          mainCh.send({
-            type: 'ga4',
-            name: eventName,
-            params: safeParams,
-            tag: 'GA4',
-          });
+          mainCh.send({ type: 'ga4', name: eventName, params: safeParams || {}, tag: 'GA4' });
         } catch {}
-        // Call original
-        return _origLogEvent(eventName, params);
+        return _origLogEvent.call(this, eventName, params);
       };
 
-      // Also intercept setUserProperty, setUserId, logScreenView if available
-      const _origScreenView = analyticsInstance.logScreenView?.bind(analyticsInstance);
-      if (_origScreenView) {
-        analyticsInstance.logScreenView = function(params) {
+      // Patch logScreenView on the prototype
+      if (proto.logScreenView) {
+        const _origScreenView = proto.logScreenView;
+        proto.logScreenView = function(params) {
           try {
             mainCh.send({ type: 'ga4', name: 'screen_view', params: JSON.parse(JSON.stringify(params || {})), tag: 'GA4' });
           } catch {}
-          return _origScreenView(params);
+          return _origScreenView.call(this, params);
         };
       }
 
-      _console.log('[RNDebugSDK] GA4 Analytics interceptor active');
+      _console.log('[RNDebugSDK] GA4 Analytics prototype interceptor active');
+      return true;
     } catch (e) {
-      // @react-native-firebase/analytics not installed — skip
+      return false;
     }
-  }, 100);
+  }
 
-  // Also try patching after a longer delay (for lazy-loaded analytics)
-  setTimeout(() => {
-    try {
-      const analyticsModule = require('@react-native-firebase/analytics');
-      const inst = analyticsModule.default ? analyticsModule.default() : analyticsModule();
-      if (inst && inst.logEvent && !inst.__reactoRadarPatched) {
-        inst.__reactoRadarPatched = true;
-        const _orig = inst.logEvent.bind(inst);
-        inst.logEvent = function(eventName, params) {
-          try {
-            let safeParams = params;
-            if (params && typeof params === 'object') {
-              try { safeParams = JSON.parse(JSON.stringify(params)); } catch {}
-            }
-            mainCh.send({ type: 'ga4', name: eventName, params: safeParams, tag: 'GA4' });
-          } catch {}
-          return _orig(eventName, params);
-        };
-        _console.log('[RNDebugSDK] GA4 Analytics interceptor active (delayed)');
-      }
-    } catch {}
-  }, 2000);
+  // Try immediately, then retry at increasing delays
+  if (!patchAnalytics()) {
+    [100, 500, 2000, 5000].forEach(delay => {
+      setTimeout(() => patchAnalytics(), delay);
+    });
+  }
 })();
 
 console.log(`[RNDebugSDK] Connected to ${HOST} | Console+Network:${PORTS.NETWORK_AND_CONSOLE} Redux:${PORTS.REDUX} Storage:${PORTS.STORAGE}`);
