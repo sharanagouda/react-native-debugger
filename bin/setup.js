@@ -275,7 +275,32 @@ ${SDK_MARKER_END}
     }
   }
 
-  // 7. Add .gitignore entry if not present
+  // 7. Add debug scripts to package.json
+  info('Adding debug scripts to package.json...');
+  const projPkg = readJSON(path.join(projectDir, 'package.json'));
+  if (projPkg && projPkg.scripts) {
+    let changed = false;
+    if (!projPkg.scripts['debug:start']) {
+      projPkg.scripts['debug:start'] = 'npx rn-debugger-app';
+      changed = true;
+    }
+    if (!projPkg.scripts['debug:metro']) {
+      projPkg.scripts['debug:metro'] = 'BROWSER=' + path.join(debuggerDir, 'bin/open-debugger.sh') + ' npx react-native start --reset-cache';
+      changed = true;
+    }
+    if (!projPkg.scripts['debug:remove']) {
+      projPkg.scripts['debug:remove'] = 'npx rn-debugger-app remove';
+      changed = true;
+    }
+    if (changed) {
+      fs.writeFileSync(path.join(projectDir, 'package.json'), JSON.stringify(projPkg, null, 2) + '\n');
+      log('Added scripts: debug:start, debug:metro, debug:remove');
+    } else {
+      log('Debug scripts already present');
+    }
+  }
+
+  // 8. Add .gitignore entry if not present
   const gitignorePath = path.join(projectDir, '.gitignore');
   if (fileExists(gitignorePath)) {
     const gitignore = fs.readFileSync(gitignorePath, 'utf8');
@@ -305,12 +330,15 @@ ${SDK_MARKER_END}
   console.log('    2. Run your RN app:     ' + C.cyan + 'npx react-native start --reset-cache' + C.reset);
   console.log('    3. Console, Network, Storage auto-connect');
   console.log();
+  console.log(C.bold + '  Tip: Open DevTools from simulator → launches RN Debugger (not Chrome):' + C.reset);
+  console.log('    ' + C.cyan + 'BROWSER=' + path.join(debuggerDir, 'bin/open-debugger.sh') + ' npx react-native start' + C.reset);
+  console.log();
   if (platform.hasAndroidDevice || platform.hasAndroidEmu) {
     console.log(C.dim + '  Tip: If adb reverse drops, re-run:' + C.reset);
     console.log(C.dim + '    adb reverse tcp:9090 tcp:9090 && adb reverse tcp:9091 tcp:9091 && adb reverse tcp:9092 tcp:9092' + C.reset);
     console.log();
   }
-  console.log(C.dim + '  To remove: node ' + path.join(debuggerDir, 'bin/setup.js') + ' ' + projectDir + ' --uninstall' + C.reset);
+  console.log(C.dim + '  To remove: npx rn-debugger-app remove' + C.reset);
   console.log();
 }
 
