@@ -139,6 +139,13 @@ function clearActiveTab() {
       $('sBadge').textContent = '0';
       renderStorage();
       break;
+    case 'ga4':
+      ga4State.events = [];
+      ga4State.selected = -1;
+      $('ga4Badge').textContent = '0';
+      renderGA4List();
+      renderGA4Summary();
+      break;
     case 'performance':
       perfState.fps = [];
       perfState.jsThread = [];
@@ -212,6 +219,8 @@ if (window.electronAPI) {
   window.electronAPI.on('redux-event', handleReduxEvent);
   window.electronAPI.on('network-event', handleNetworkEvent);
   window.electronAPI.on('storage-event', handleStorageEvent);
+
+  window.electronAPI.on('ga4-event', handleGA4Event);
 
   window.electronAPI.on('perf-event', event => {
     handlePerfEvent(event);
@@ -1394,6 +1403,211 @@ function buildCurlCommand(r) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GA4 EVENT INSPECTOR
+// ─────────────────────────────────────────────────────────────────────────────
+const ga4State = { events: [], selected: -1, searchFilter: '', tagFilter: 'all' };
+
+function initGA4Panel() {
+  const panel = $('panel-ga4');
+  panel.innerHTML = `
+    <div class="panel-toolbar">
+      <span class="panel-label">GA4 Events</span>
+      <span class="badge" id="ga4Badge">0</span>
+      <div class="ml-auto" style="display:flex;align-items:center;gap:8px">
+        <input id="ga4Search" class="net-search-input" placeholder="Filter events..." />
+      </div>
+    </div>
+    <div class="ga4-layout">
+      <div class="ga4-list-pane">
+        <div class="ga4-list-header">
+          <span class="ga4-hcell" style="width:90px">Time</span>
+          <span class="ga4-hcell" style="width:50px">Tag</span>
+          <span class="ga4-hcell" style="flex:1">Event</span>
+          <span class="ga4-hcell" style="width:70px">Status</span>
+        </div>
+        <div class="scroll-area" id="ga4List">
+          <div class="empty-state" id="ga4Empty">
+            <div class="icon" style="font-size:28px;opacity:.2">📊</div>
+            <div class="label">No GA4 events yet</div>
+            <div class="hint">Events from @react-native-firebase/analytics will appear here</div>
+          </div>
+        </div>
+      </div>
+      <div class="ga4-detail-pane" id="ga4DetailPane">
+        <div class="ga4-detail-header">EVENT DETAIL</div>
+        <div class="scroll-area ga4-detail-content" id="ga4Detail">
+          <span style="color:var(--text-dim);padding:16px;display:block">Click an event to inspect</span>
+        </div>
+      </div>
+    </div>
+    <div class="ga4-summary" id="ga4Summary">
+      <span class="ga4-summary-label">Total: 0</span>
+    </div>`;
+
+  $('ga4Search').addEventListener('input', (e) => {
+    ga4State.searchFilter = e.target.value.toLowerCase().trim();
+    renderGA4List();
+  });
+}
+
+function handleGA4Event(event) {
+  ga4State.events.push({
+    name: event.name || '?',
+    params: event.params || {},
+    tag: event.tag || 'GA4',
+    ts: event.ts || Date.now(),
+    index: ga4State.events.length,
+  });
+  $('ga4Badge').textContent = ga4State.events.length;
+
+  // Append to list (batched via rAF)
+  if (!ga4State._raf) {
+    ga4State._raf = requestAnimationFrame(() => {
+      ga4State._raf = null;
+      renderGA4List();
+      renderGA4Summary();
+    });
+  }
+}
+
+function renderGA4List() {
+  const list = $('ga4List');
+  const empty = $('ga4Empty');
+  if (!list) return;
+
+  const { searchFilter } = ga4State;
+  const visible = ga4State.events.filter(e =>
+    !searchFilter || e.name.toLowerCase().includes(searchFilter)
+  );
+
+  empty.style.display = visible.length ? 'none' : 'flex';
+  list.querySelectorAll('.ga4-row').forEach(e => e.remove());
+
+  // Cap at 500 rows
+  const MAX = 500;
+  const toRender = visible.length > MAX ? visible.slice(-MAX) : visible;
+
+  const frag = document.createDocumentFragment();
+  toRender.forEach(e => {
+    const row = document.createElement('div');
+    row.className = 'ga4-row' + (e.index === ga4State.selected ? ' selected' : '');
+
+    const time = new Date(e.ts).toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
+
+    row.innerHTML = `
+      <span class="ga4-cell ga4-time">${time}</span>
+      <span class="ga4-cell ga4-tag">[${esc(e.tag)}]</span>
+      <span class="ga4-cell ga4-name">${esc(e.name)}</span>
+      <span class="ga4-cell ga4-status">✓ fired</span>`;
+
+    row.addEventListener('click', () => {
+      ga4State.selected = e.index;
+      list.querySelectorAll('.ga4-row').forEach(r => r.classList.remove('selected'));
+      row.classList.add('selected');
+      renderGA4Detail(e);
+    });
+
+    // Right-click to copy
+    row.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      showContextMenu(ev, [
+        { label: 'Copy Event Name', action: () => navigator.clipboard.writeText(e.name) },
+        { label: 'Copy as JSON', action: () => navigator.clipboard.writeText(JSON.stringify({ event: e.name, params: e.params }, null, 2)) },
+      ]);
+    });
+
+    frag.appendChild(row);
+  });
+  list.appendChild(frag);
+
+  // Scroll to bottom
+  list.scrollTop = list.scrollHeight;
+}
+
+function renderGA4Detail(e) {
+  const detail = $('ga4Detail');
+  if (!detail) return;
+
+  const time = new Date(e.ts).toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
+
+  detail.innerHTML = '';
+
+  // Header info
+  const header = document.createElement('div');
+  header.className = 'ga4-detail-info';
+  header.innerHTML = `
+    <div class="ga4-detail-row"><span class="ga4-detail-key">Event Name</span><span class="ga4-detail-val" style="color:var(--accent);font-weight:600">${esc(e.name)}</span></div>
+    <div class="ga4-detail-row"><span class="ga4-detail-key">Timestamp</span><span class="ga4-detail-val">${time}</span></div>
+    <div class="ga4-detail-row"><span class="ga4-detail-key">Tag</span><span class="ga4-detail-val">${esc(e.tag)}</span></div>`;
+  detail.appendChild(header);
+
+  // Separator
+  const sep = document.createElement('div');
+  sep.className = 'ga4-detail-sep';
+  detail.appendChild(sep);
+
+  // Parameters as key-value list with collapsible objects
+  if (e.params && typeof e.params === 'object') {
+    const keys = Object.keys(e.params).sort();
+    keys.forEach(key => {
+      const val = e.params[key];
+      const row = document.createElement('div');
+      row.className = 'ga4-param-row';
+
+      const keyEl = document.createElement('span');
+      keyEl.className = 'ga4-param-key';
+      keyEl.textContent = key;
+      row.appendChild(keyEl);
+
+      if (val && typeof val === 'object') {
+        // Collapsible object tree
+        const treeWrap = document.createElement('span');
+        treeWrap.className = 'ga4-param-val';
+        treeWrap.appendChild(createTreeNode(null, val, true));
+        row.appendChild(treeWrap);
+      } else {
+        const valEl = document.createElement('span');
+        valEl.className = 'ga4-param-val';
+        valEl.textContent = val === null ? 'null' : val === undefined ? 'undefined' : JSON.stringify(val);
+        if (typeof val === 'string') valEl.style.color = 'var(--green)';
+        else if (typeof val === 'number') valEl.style.color = 'var(--orange)';
+        else if (typeof val === 'boolean') valEl.style.color = 'var(--accent2)';
+        row.appendChild(valEl);
+      }
+
+      detail.appendChild(row);
+    });
+  }
+
+  // Right-click on detail
+  detail.addEventListener('contextmenu', (ev) => {
+    ev.preventDefault();
+    showContextMenu(ev, [
+      { label: 'Copy All Parameters', action: () => navigator.clipboard.writeText(JSON.stringify(e.params, null, 2)) },
+      { label: 'Copy Event JSON', action: () => navigator.clipboard.writeText(JSON.stringify({ event: e.name, params: e.params, timestamp: e.ts }, null, 2)) },
+    ]);
+  });
+}
+
+function renderGA4Summary() {
+  const summary = $('ga4Summary');
+  if (!summary) return;
+
+  const counts = {};
+  ga4State.events.forEach(e => {
+    counts[e.name] = (counts[e.name] || 0) + 1;
+  });
+
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const top = sorted.slice(0, 8);
+  const topHtml = top.map(([name, count]) =>
+    `<span class="ga4-summary-item"><b>${esc(name)}</b>: ${count}</span>`
+  ).join('');
+
+  summary.innerHTML = `<span class="ga4-summary-label">Total: ${ga4State.events.length}</span>${topHtml}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // REDUX PANEL
 // ─────────────────────────────────────────────────────────────────────────────
 function initReduxPanel() {
@@ -2455,6 +2669,7 @@ function handleMemoryEvent(event) {
 // ─────────────────────────────────────────────────────────────────────────────
 initConsolePanel();
 initNetworkPanel();
+initGA4Panel();
 initPerformancePanel();
 initMemoryPanel();
 initReduxPanel();

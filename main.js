@@ -257,6 +257,8 @@ function startBridgeServers() {
       mainWindow?.webContents.send('console-event', event);
     } else if (event.type === 'perf') {
       mainWindow?.webContents.send('perf-event', event);
+    } else if (event.type === 'ga4') {
+      mainWindow?.webContents.send('ga4-event', event);
     } else {
       mainWindow?.webContents.send('network-event', event);
     }

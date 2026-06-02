@@ -529,10 +529,80 @@ try {
   }, 2000);
 })();
 
-// Note: "Open DevTools" in the simulator dev menu opens Chrome/Metro's built-in debugger.
-// To debug JS in the ReactoRadar app instead, press Cmd+D in the debugger app
-// or click the "JS Debugger" button. Both can coexist — they connect to the
-// same Hermes CDP target independently.
+// ─── GA4 / Firebase Analytics Interceptor ────────────────────────────────────
+// Intercepts @react-native-firebase/analytics logEvent calls and sends event
+// data to the debugger for the GA4 Event Inspector panel.
+(function setupGA4Interceptor() {
+  // Delay to ensure firebase module is loaded (import hoisting)
+  setTimeout(() => {
+    try {
+      const analyticsModule = require('@react-native-firebase/analytics');
+      if (!analyticsModule) return;
+
+      const analyticsInstance = analyticsModule.default ? analyticsModule.default() : analyticsModule();
+      if (!analyticsInstance || !analyticsInstance.logEvent) return;
+      if (analyticsInstance.__reactoRadarPatched) return;
+      analyticsInstance.__reactoRadarPatched = true;
+
+      const _origLogEvent = analyticsInstance.logEvent.bind(analyticsInstance);
+      analyticsInstance.logEvent = function(eventName, params) {
+        // Send to debugger
+        try {
+          let safeParams = params;
+          if (params && typeof params === 'object') {
+            try { safeParams = JSON.parse(JSON.stringify(params)); } catch { safeParams = String(params); }
+          }
+          mainCh.send({
+            type: 'ga4',
+            name: eventName,
+            params: safeParams,
+            tag: 'GA4',
+          });
+        } catch {}
+        // Call original
+        return _origLogEvent(eventName, params);
+      };
+
+      // Also intercept setUserProperty, setUserId, logScreenView if available
+      const _origScreenView = analyticsInstance.logScreenView?.bind(analyticsInstance);
+      if (_origScreenView) {
+        analyticsInstance.logScreenView = function(params) {
+          try {
+            mainCh.send({ type: 'ga4', name: 'screen_view', params: JSON.parse(JSON.stringify(params || {})), tag: 'GA4' });
+          } catch {}
+          return _origScreenView(params);
+        };
+      }
+
+      _console.log('[RNDebugSDK] GA4 Analytics interceptor active');
+    } catch (e) {
+      // @react-native-firebase/analytics not installed — skip
+    }
+  }, 100);
+
+  // Also try patching after a longer delay (for lazy-loaded analytics)
+  setTimeout(() => {
+    try {
+      const analyticsModule = require('@react-native-firebase/analytics');
+      const inst = analyticsModule.default ? analyticsModule.default() : analyticsModule();
+      if (inst && inst.logEvent && !inst.__reactoRadarPatched) {
+        inst.__reactoRadarPatched = true;
+        const _orig = inst.logEvent.bind(inst);
+        inst.logEvent = function(eventName, params) {
+          try {
+            let safeParams = params;
+            if (params && typeof params === 'object') {
+              try { safeParams = JSON.parse(JSON.stringify(params)); } catch {}
+            }
+            mainCh.send({ type: 'ga4', name: eventName, params: safeParams, tag: 'GA4' });
+          } catch {}
+          return _orig(eventName, params);
+        };
+        _console.log('[RNDebugSDK] GA4 Analytics interceptor active (delayed)');
+      }
+    } catch {}
+  }, 2000);
+})();
 
 console.log(`[RNDebugSDK] Connected to ${HOST} | Console+Network:${PORTS.NETWORK_AND_CONSOLE} Redux:${PORTS.REDUX} Storage:${PORTS.STORAGE}`);
 

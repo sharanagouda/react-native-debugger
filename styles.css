@@ -1264,6 +1264,102 @@ mark { background: rgba(79,172,255,.2); color: var(--accent); border-radius: 2px
 ───────────────────────────────────────────────────────────────────────────── */
 .memory-layout { display: flex; flex-direction: column; height: 100%; }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   GA4 EVENT INSPECTOR
+───────────────────────────────────────────────────────────────────────────── */
+.ga4-layout { display: flex; flex: 1; overflow: hidden; }
+.ga4-list-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.ga4-detail-pane {
+  width: 45%;
+  min-width: 280px;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ga4-list-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.ga4-hcell { padding: 3px 6px; }
+
+.ga4-row {
+  display: flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.08s;
+  font-size: 11px;
+}
+.ga4-row:hover { background: var(--bg3); }
+.ga4-row.selected { background: var(--bg4); border-left: 2px solid var(--accent); }
+
+.ga4-cell { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ga4-time { width: 90px; color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
+.ga4-tag { width: 50px; color: var(--accent); font-size: 10px; font-weight: 600; flex-shrink: 0; }
+.ga4-name { flex: 1; color: var(--text-bright); font-weight: 500; min-width: 0; }
+.ga4-status { width: 70px; color: var(--green); font-size: 10px; flex-shrink: 0; }
+
+/* Detail pane */
+.ga4-detail-header {
+  padding: 8px 14px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  flex-shrink: 0;
+}
+.ga4-detail-content { flex: 1; overflow-y: auto; padding: 10px 14px; user-select: text; -webkit-user-select: text; }
+.ga4-detail-info { margin-bottom: 8px; }
+.ga4-detail-row { display: flex; gap: 12px; padding: 3px 0; font-size: 11px; }
+.ga4-detail-key { color: var(--text-dim); min-width: 100px; flex-shrink: 0; }
+.ga4-detail-val { color: var(--text); word-break: break-all; }
+.ga4-detail-sep { height: 1px; background: var(--border); margin: 8px 0; }
+
+.ga4-param-row {
+  display: flex;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+  align-items: flex-start;
+}
+.ga4-param-row:last-child { border-bottom: none; }
+.ga4-param-key { color: var(--accent); min-width: 140px; flex-shrink: 0; font-weight: 500; padding-top: 1px; }
+.ga4-param-val { color: var(--text); word-break: break-all; flex: 1; min-width: 0; }
+
+/* Summary bar */
+.ga4-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+.ga4-summary-label { font-weight: 600; color: var(--text-mid); flex-shrink: 0; }
+.ga4-summary-item { flex-shrink: 0; }
+.ga4-summary-item b { color: var(--text); font-weight: 500; }
+
 /* ── LIGHT THEME OVERRIDES ───────────────────────────────────────────────────── */
 [data-theme="light"] .tb-btn.primary {
   background: rgba(9,105,218,.08);
