@@ -505,6 +505,12 @@ function buildMenu() {
         { role: 'copy' },
         { role: 'paste' },
         { role: 'selectAll' },
+        { type: 'separator' },
+        {
+          label: 'Find',
+          accelerator: 'Cmd+F',
+          click: () => { mainWindow?.webContents.send('focus-search'); },
+        },
       ],
     },
     {

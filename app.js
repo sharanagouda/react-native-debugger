@@ -234,6 +234,27 @@ if (window.electronAPI) {
 
   window.electronAPI.on('clear-all-ui', clearAll);
 
+  // Cmd+F — focus the search input for the active panel
+  window.electronAPI.on('focus-search', () => {
+    const searchMap = {
+      console: 'consoleSearch',
+      network: 'netSearchInput',
+      ga4: 'ga4Search',
+      redux: 'reduxSearch',
+      storage: 'storageSearch',
+    };
+    const inputId = searchMap[state.activePanel];
+    if (inputId) {
+      const el = $(inputId);
+      if (el) { el.focus(); el.select(); }
+    }
+    // Also show/focus Console bottom find bar
+    if (state.activePanel === 'console') {
+      const bar = $('consoleFindBar');
+      if (bar) { bar.style.display = 'flex'; $('consoleFindInput')?.focus(); }
+    }
+  });
+
   window.electronAPI.on('app-version', (version) => {
     state._appVersion = version;
     const el = $('aboutVersion');
@@ -339,6 +360,13 @@ function initConsolePanel() {
         <div class="label">No logs yet</div>
         <div class="hint">Add RNDebugSDK.js to your app</div>
       </div>
+    </div>
+    <div class="console-find-bar" id="consoleFindBar" style="display:none">
+      <input id="consoleFindInput" class="console-find-input" placeholder="Find in logs... (Cmd+F)" />
+      <span id="consoleFindCount" class="console-find-count"></span>
+      <button class="console-find-btn" id="consoleFindPrev" title="Previous">▲</button>
+      <button class="console-find-btn" id="consoleFindNext" title="Next">▼</button>
+      <button class="console-find-btn" id="consoleFindClose" title="Close (Esc)">✕</button>
     </div>`;
 
   // Search filter
@@ -380,6 +408,52 @@ function initConsolePanel() {
     _consolePending = [];
     $('cBadge').textContent = '0';
     renderConsole();
+  });
+
+  // Find bar (Cmd+F)
+  let _findMatches = [];
+  let _findIdx = -1;
+
+  function doFind(term) {
+    // Clear previous highlights
+    document.querySelectorAll('.console-find-highlight').forEach(el => {
+      el.replaceWith(el.textContent);
+    });
+    _findMatches = [];
+    _findIdx = -1;
+    if (!term) { $('consoleFindCount').textContent = ''; return; }
+
+    const rows = document.querySelectorAll('#consoleList .log-row');
+    rows.forEach(row => {
+      const text = row.textContent.toLowerCase();
+      if (text.includes(term.toLowerCase())) _findMatches.push(row);
+    });
+    $('consoleFindCount').textContent = _findMatches.length ? `${_findMatches.length} found` : 'No matches';
+    if (_findMatches.length) { _findIdx = 0; _findMatches[0].scrollIntoView({ block: 'nearest' }); _findMatches[0].style.outline = '1px solid var(--accent)'; }
+  }
+
+  function findNav(dir) {
+    if (!_findMatches.length) return;
+    if (_findMatches[_findIdx]) _findMatches[_findIdx].style.outline = '';
+    _findIdx = (_findIdx + dir + _findMatches.length) % _findMatches.length;
+    _findMatches[_findIdx].scrollIntoView({ block: 'nearest' });
+    _findMatches[_findIdx].style.outline = '1px solid var(--accent)';
+    $('consoleFindCount').textContent = `${_findIdx + 1}/${_findMatches.length}`;
+  }
+
+  $('consoleFindInput').addEventListener('input', (e) => doFind(e.target.value));
+  $('consoleFindPrev').addEventListener('click', () => findNav(-1));
+  $('consoleFindNext').addEventListener('click', () => findNav(1));
+  $('consoleFindClose').addEventListener('click', () => {
+    $('consoleFindBar').style.display = 'none';
+    if (_findMatches[_findIdx]) _findMatches[_findIdx].style.outline = '';
+    _findMatches = []; _findIdx = -1;
+    $('consoleFindInput').value = '';
+    $('consoleFindCount').textContent = '';
+  });
+  $('consoleFindInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') $('consoleFindClose').click();
+    if (e.key === 'Enter') findNav(e.shiftKey ? -1 : 1);
   });
 }
 

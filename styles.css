@@ -369,6 +369,41 @@ body {
 .tab:hover:not(.active) { color: var(--text); }
 .ml-auto { margin-left: auto; }
 
+/* Console find bar (Cmd+F) */
+.console-find-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.console-find-input {
+  flex: 1;
+  padding: 3px 8px;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: var(--bg3);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+}
+.console-find-input:focus { border-color: var(--accent); }
+.console-find-count { font-size: 10px; color: var(--text-dim); flex-shrink: 0; min-width: 40px; }
+.console-find-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.console-find-btn:hover { background: var(--bg3); color: var(--text); }
+.console-find-highlight { background: rgba(245,200,66,.3); border-radius: 2px; }
+
 /* Panel clear button (used in Console, Network, GA4, Redux) */
 .panel-clear-btn {
   padding: 3px 10px;
