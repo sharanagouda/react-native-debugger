@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/New%20Architecture-Supported-green" alt="New Arch" />
   <img src="https://img.shields.io/badge/Platform-macOS-lightgrey" alt="macOS" />
   <img src="https://img.shields.io/badge/License-MIT-yellow" alt="MIT" />
-  <img src="https://img.shields.io/npm/v/rn-debugger-app" alt="npm version" />
+  <img src="https://img.shields.io/npm/v/reactoradar" alt="npm version" />
 </p>
 
 ---
@@ -52,8 +52,8 @@
 No install needed — run directly from your React Native project:
 
 ```bash
-npx rn-debugger-app setup     # Install SDK into your RN project
-npx rn-debugger-app            # Launch the debugger app
+npx reactoradar setup     # Install SDK into your RN project
+npx reactoradar            # Launch the debugger app
 ```
 
 ### Option B: Download .dmg
@@ -64,7 +64,7 @@ npx rn-debugger-app            # Launch the debugger app
 
 ```bash
 cd your-react-native-project
-npx rn-debugger-app setup
+npx reactoradar setup
 ```
 
 4. Launch the app from Applications and run your RN app
@@ -74,7 +74,7 @@ npx rn-debugger-app setup
 ### Option C: Using npm (global)
 
 ```bash
-npm install -g rn-debugger-app
+npm install -g reactoradar
 ```
 
 ### Option D: Build from source
@@ -101,7 +101,7 @@ This app does **not** use the legacy Remote Debugger. It connects via WebSocket 
 
 ```bash
 cd your-react-native-project
-npx rn-debugger-app setup
+npx reactoradar setup
 ```
 
 This automatically:
@@ -116,7 +116,7 @@ This automatically:
 
 ```bash
 # Using npx:
-npx rn-debugger-app
+npx reactoradar
 
 # Or if you installed the .dmg:
 open "/Applications/RN Debugger.app"
@@ -133,7 +133,7 @@ Console logs, network requests, Redux actions, and AsyncStorage data flow into t
 ### 4. Uninstall
 
 ```bash
-npx rn-debugger-app remove
+npx reactoradar remove
 ```
 
 Clean removal — removes SDK file, patches from `index.js`, Redux wiring, and `.gitignore` entry.
@@ -143,9 +143,9 @@ Clean removal — removes SDK file, patches from `index.js`, Redux wiring, and `
 ```json
 {
   "scripts": {
-    "debug:setup": "npx rn-debugger-app setup",
+    "debug:setup": "npx reactoradar setup",
     "debug:start": "npx rn-debugger",
-    "debug:remove": "npx rn-debugger-app remove"
+    "debug:remove": "npx reactoradar remove"
   }
 }
 ```
@@ -285,7 +285,7 @@ adb reverse tcp:8097 tcp:8097
 | Network tab empty | Run Metro with `--reset-cache`. Ensure Reactotron has `networking: false` |
 | `XHRInterceptor.js does not exist` | Set `networking: false` in ReactotronConfig.js |
 | Metro crashes with WebSocket error | Update to latest version — CDP polling was replaced with on-demand fetching |
-| Console shows `apply (native)` as caller | Update SDK with `npx rn-debugger-app setup` |
+| Console shows `apply (native)` as caller | Update SDK with `npx reactoradar setup` |
 
 
 ## How it works

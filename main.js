@@ -100,7 +100,7 @@ async function createMainWindow() {
 // ─── Update Checker ──────────────────────────────────────────────────────────
 function checkForUpdates() {
   const currentVersion = require('./package.json').version;
-  https.get('https://registry.npmjs.org/rn-debugger-app/latest', (res) => {
+  https.get('https://registry.npmjs.org/reactoradar/latest', (res) => {
     let data = '';
     res.on('data', d => data += d);
     res.on('end', () => {

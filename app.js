@@ -1868,11 +1868,11 @@ function initSettingsPanel() {
           <div class="settings-section-title">How to Use</div>
           <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
             <div class="settings-hint" style="line-height:1.8">
-              <b style="color:var(--text)">1. Setup</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx rn-debugger-app setup</code> from your RN project<br/>
-              <b style="color:var(--text)">2. Start</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx rn-debugger-app</code> or open ReactoRadar.app<br/>
+              <b style="color:var(--text)">1. Setup</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx reactoradar setup</code> from your RN project<br/>
+              <b style="color:var(--text)">2. Start</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx reactoradar</code> or open ReactoRadar.app<br/>
               <b style="color:var(--text)">3. Run your app</b> — <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx react-native start --reset-cache</code><br/>
               <b style="color:var(--text)">4. Debug</b> — Console, Network, Redux data flows automatically<br/>
-              <b style="color:var(--text)">5. Remove</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx rn-debugger-app remove</code> to clean uninstall
+              <b style="color:var(--text)">5. Remove</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx reactoradar remove</code> to clean uninstall
             </div>
           </div>
         </div>

@@ -1,12 +1,12 @@
 {
-  "name": "rn-debugger-app",
+  "name": "reactoradar",
   "productName": "ReactoRadar",
   "version": "1.2.3",
   "description": "macOS debugger for React Native — Console, Sources, Network, Performance, Memory, Redux, AsyncStorage, React tree. Supports RN 0.74+ with Hermes and New Architecture.",
   "main": "main.js",
   "bin": {
+    "reactoradar": "./bin/cli.js",
     "rn-debugger-app": "./bin/cli.js",
-    "rn-debugger": "./bin/cli.js",
     "rn-debugger-setup": "./bin/setup.js"
   },
   "keywords": [

@@ -281,7 +281,7 @@ ${SDK_MARKER_END}
   if (projPkg && projPkg.scripts) {
     let changed = false;
     if (!projPkg.scripts['debug:start']) {
-      projPkg.scripts['debug:start'] = 'npx rn-debugger-app';
+      projPkg.scripts['debug:start'] = 'npx reactoradar';
       changed = true;
     }
     if (!projPkg.scripts['debug:metro']) {
@@ -289,7 +289,7 @@ ${SDK_MARKER_END}
       changed = true;
     }
     if (!projPkg.scripts['debug:remove']) {
-      projPkg.scripts['debug:remove'] = 'npx rn-debugger-app remove';
+      projPkg.scripts['debug:remove'] = 'npx reactoradar remove';
       changed = true;
     }
     if (changed) {
@@ -324,7 +324,7 @@ ${SDK_MARKER_END}
   if (dmgInstalled) {
     console.log('    1. Start the debugger:  ' + C.cyan + 'open "/Applications/ReactoRadar.app"' + C.reset);
   } else {
-    console.log('    1. Start the debugger:  ' + C.cyan + 'npx rn-debugger-app' + C.reset);
+    console.log('    1. Start the debugger:  ' + C.cyan + 'npx reactoradar' + C.reset);
     console.log('       ' + C.dim + '(or download .dmg from https://github.com/sharanagouda/react-native-debugger/releases)' + C.reset);
   }
   console.log('    2. Run your RN app:     ' + C.cyan + 'npx react-native start --reset-cache' + C.reset);
@@ -338,7 +338,7 @@ ${SDK_MARKER_END}
     console.log(C.dim + '    adb reverse tcp:9090 tcp:9090 && adb reverse tcp:9091 tcp:9091 && adb reverse tcp:9092 tcp:9092' + C.reset);
     console.log();
   }
-  console.log(C.dim + '  To remove: npx rn-debugger-app remove' + C.reset);
+  console.log(C.dim + '  To remove: npx reactoradar remove' + C.reset);
   console.log();
 }
 
