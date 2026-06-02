@@ -1,0 +1,75 @@
+{
+  "name": "rn-debugger-app",
+  "productName": "RN Debugger",
+  "version": "1.0.0",
+  "description": "macOS debugger for React Native — Console, Sources, Network, Performance, Memory, Redux, AsyncStorage, React tree. Supports RN 0.74+ with Hermes and New Architecture.",
+  "main": "main.js",
+  "bin": {
+    "rn-debugger": "./bin/cli.js",
+    "rn-debugger-setup": "./bin/setup.js"
+  },
+  "keywords": [
+    "react-native",
+    "debugger",
+    "devtools",
+    "electron",
+    "redux",
+    "network-inspector",
+    "hermes",
+    "flipper-alternative",
+    "react-native-debugger",
+    "macos"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sharanagouda/react-native-debugger.git"
+  },
+  "homepage": "https://github.com/sharanagouda/react-native-debugger#readme",
+  "bugs": {
+    "url": "https://github.com/sharanagouda/react-native-debugger/issues"
+  },
+  "license": "MIT",
+  "author": "sharanagouda",
+  "files": [
+    "main.js",
+    "preload.js",
+    "index.html",
+    "app.js",
+    "styles.css",
+    "sdk/",
+    "bin/",
+    "assets/",
+    "src/"
+  ],
+  "scripts": {
+    "start": "unset ELECTRON_RUN_AS_NODE && electron .",
+    "setup": "node bin/setup.js",
+    "unsetup": "node bin/setup.js --uninstall",
+    "build": "electron-builder --mac",
+    "pack": "electron-builder --mac --dir"
+  },
+  "dependencies": {
+    "react-devtools-core": "^5.3.1",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "electron": "^35.7.5",
+    "electron-builder": "^24.13.0",
+    "electron-devtools-installer": "^3.2.0"
+  },
+  "build": {
+    "appId": "com.yourteam.rn-debugger",
+    "productName": "RN Debugger",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "rn_debuggerIcon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

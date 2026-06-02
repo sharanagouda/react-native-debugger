@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://localhost:* ws://localhost:*; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
+  <title>RN Debugger</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ── TITLE BAR (logo + device status + actions in one line) ── -->
+    <header id="titlebar">
+      <div class="titlebar-drag"></div>
+      <div class="logo">RN<span>debug</span></div>
+      <span class="title-sep">—</span>
+      <div id="deviceStatus" class="device-status waiting">
+        <span class="device-dot"></span>
+        <span id="deviceText">Waiting for device...</span>
+      </div>
+      <div class="titlebar-actions">
+        <button class="tb-btn" id="btnClear" title="Clear active tab (⌘K clears all)">Clear</button>
+        <button class="tb-btn primary" id="btnCDP" title="Open JS Debugger (⌘D)">JS Debugger ↗</button>
+      </div>
+    </header>
+
+    <!-- ── SIDEBAR ── -->
+    <nav id="sidebar">
+      <button class="nav-btn active" data-panel="console"  title="Console">
+        <svg viewBox="0 0 20 20"><path d="M3 5h14M3 10h8M3 15h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span>Console</span>
+      </button>
+      <button class="nav-btn" data-panel="network" title="Network">
+        <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M10 3c-2 2.5-2 11.5 0 14M10 3c2 2.5 2 11.5 0 14M3 10h14" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span>Network</span>
+      </button>
+      <button class="nav-btn" data-panel="performance" title="Performance">
+        <svg viewBox="0 0 20 20"><polyline points="2,16 6,10 10,13 14,5 18,8" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Perf</span>
+      </button>
+      <button class="nav-btn" data-panel="memory" title="Memory">
+        <svg viewBox="0 0 20 20"><rect x="3" y="8" width="3" height="8" rx="0.5" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="8.5" y="4" width="3" height="12" rx="0.5" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="14" y="6" width="3" height="10" rx="0.5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+        <span>Memory</span>
+      </button>
+      <button class="nav-btn" data-panel="redux" title="Redux">
+        <svg viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><rect x="11" y="3" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><rect x="7" y="11" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        <span>Redux</span>
+      </button>
+      <button class="nav-btn" data-panel="storage" title="Application">
+        <svg viewBox="0 0 20 20"><ellipse cx="10" cy="6" rx="7" ry="3" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M3 6v4c0 1.66 3.13 3 7 3s7-1.34 7-3V6" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M3 10v4c0 1.66 3.13 3 7 3s7-1.34 7-3v-4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        <span>App</span>
+      </button>
+      <button class="nav-btn" data-panel="react" title="React Tree">
+        <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="2" fill="currentColor"/><ellipse cx="10" cy="10" rx="8" ry="3.5" stroke="currentColor" stroke-width="1.5" fill="none"/><ellipse cx="10" cy="10" rx="8" ry="3.5" stroke="currentColor" stroke-width="1.5" fill="none" transform="rotate(60 10 10)"/><ellipse cx="10" cy="10" rx="8" ry="3.5" stroke="currentColor" stroke-width="1.5" fill="none" transform="rotate(120 10 10)"/></svg>
+        <span>React</span>
+      </button>
+      <div class="nav-spacer"></div>
+      <button class="nav-btn" data-panel="settings" title="Settings">
+        <svg viewBox="0 0 20 20"><path d="M10 13a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M17.4 11c.2-.6.2-1.4 0-2l1.3-1-1.7-3-1.6.5c-.5-.4-1-.7-1.6-.9L13.4 3H10.6l-.4 1.6c-.6.2-1.1.5-1.6.9L7 5 5.3 8l1.3 1c-.2.6-.2 1.4 0 2L5.3 12 7 15l1.6-.5c.5.4 1 .7 1.6.9l.4 1.6h2.8l.4-1.6c.6-.2 1.1-.5 1.6-.9l1.6.5 1.7-3-1.3-1z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+
+    <!-- ── PANELS ── -->
+    <main id="content">
+      <div id="panel-console"     class="panel active"></div>
+      <div id="panel-network"     class="panel"></div>
+      <div id="panel-performance" class="panel"></div>
+      <div id="panel-memory"      class="panel"></div>
+      <div id="panel-redux"       class="panel"></div>
+      <div id="panel-storage"     class="panel"></div>
+      <div id="panel-react"       class="panel"></div>
+      <div id="panel-settings"    class="panel"></div>
+    </main>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
