@@ -478,14 +478,15 @@ function buildMenu() {
         },
         { type: 'separator' },
         {
-          label: 'Toggle Dark/Light Mode',
+          label: 'Next Theme',
           accelerator: 'Cmd+Shift+T',
           click: () => {
-            const next = nativeTheme.themeSource === 'dark' ? 'light' : 'dark';
-            nativeTheme.themeSource = next;
-            const bg = next === 'light' ? '#f5f6f8' : '#0a0b0e';
+            const themes = ['dark','light','monokai','dracula','solarized-dark','solarized-light','nord','github-dark','one-dark'];
+            const current = nativeTheme.themeSource || 'dark';
+            const idx = themes.indexOf(current);
+            const next = themes[(idx + 1) % themes.length];
+            nativeTheme.themeSource = next.includes('light') ? 'light' : 'dark';
             if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.setBackgroundColor(bg);
               mainWindow.webContents.send('theme-changed', next);
             }
           },

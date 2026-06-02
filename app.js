@@ -246,8 +246,7 @@ if (window.electronAPI) {
   window.electronAPI.on('theme-changed', theme => {
     document.documentElement.setAttribute('data-theme', theme);
     setStoredTheme(theme);
-    // Update settings panel buttons if visible
-    document.querySelectorAll('#themeSwitcher .theme-option')
+    document.querySelectorAll('#themeSwitcher .theme-card')
       .forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
   });
 }
@@ -1730,7 +1729,9 @@ function setStoredFontSize(s) {
 
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  window.electronAPI?.setTheme(theme);
+  // Tell main process (light themes need light nativeTheme for window chrome)
+  const isLight = ['light', 'solarized-light'].includes(theme);
+  window.electronAPI?.setTheme(isLight ? 'light' : 'dark');
 }
 
 function applyFontSize(size) {
@@ -1755,15 +1756,12 @@ function initSettingsPanel() {
       <div class="settings-content">
         <div class="settings-section">
           <div class="settings-section-title">Appearance</div>
-          <div class="settings-row">
+          <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
             <div>
               <div class="settings-label">Theme</div>
-              <div class="settings-hint">Switch between dark and light mode</div>
+              <div class="settings-hint">Choose a color theme for the debugger</div>
             </div>
-            <div class="theme-switcher" id="themeSwitcher">
-              <button class="theme-option${current==='dark'  ?' active':''}" data-theme="dark">Dark</button>
-              <button class="theme-option${current==='light' ?' active':''}" data-theme="light">Light</button>
-            </div>
+            <div class="theme-grid" id="themeSwitcher"></div>
           </div>
           <div class="settings-row">
             <div>
@@ -1847,12 +1845,37 @@ function initSettingsPanel() {
       </div>
     </div>`;
 
+  // Build theme cards
+  const themes = [
+    { id: 'dark',            name: 'Dark',            colors: ['#0d0e11','#4facff','#3dd68c','#ff5e72'] },
+    { id: 'light',           name: 'Light',           colors: ['#f5f6f8','#0969da','#1a7f37','#cf222e'] },
+    { id: 'monokai',         name: 'Monokai',         colors: ['#272822','#66d9ef','#a6e22e','#f92672'] },
+    { id: 'dracula',         name: 'Dracula',         colors: ['#282a36','#8be9fd','#50fa7b','#ff5555'] },
+    { id: 'solarized-dark',  name: 'Solarized Dark',  colors: ['#002b36','#268bd2','#859900','#dc322f'] },
+    { id: 'solarized-light', name: 'Solarized Light', colors: ['#fdf6e3','#268bd2','#859900','#dc322f'] },
+    { id: 'nord',            name: 'Nord',            colors: ['#2e3440','#88c0d0','#a3be8c','#bf616a'] },
+    { id: 'github-dark',     name: 'GitHub Dark',     colors: ['#0d1117','#58a6ff','#3fb950','#f85149'] },
+    { id: 'one-dark',        name: 'One Dark',        colors: ['#282c34','#61afef','#98c379','#e06c75'] },
+  ];
+  const grid = $('themeSwitcher');
+  themes.forEach(t => {
+    const btn = document.createElement('button');
+    btn.className = 'theme-card' + (current === t.id ? ' active' : '');
+    btn.dataset.theme = t.id;
+    btn.innerHTML = '<div class="theme-preview" style="background:' + t.colors[0] + '">' +
+      '<span style="background:' + t.colors[1] + '"></span>' +
+      '<span style="background:' + t.colors[2] + '"></span>' +
+      '<span style="background:' + t.colors[3] + '"></span>' +
+      '</div><div class="theme-name">' + t.name + '</div>';
+    grid.appendChild(btn);
+  });
+
   // Theme switcher
   $('themeSwitcher').addEventListener('click', (e) => {
-    const btn = e.target.closest('.theme-option');
+    const btn = e.target.closest('.theme-card');
     if (!btn) return;
     const theme = btn.dataset.theme;
-    document.querySelectorAll('#themeSwitcher .theme-option').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#themeSwitcher .theme-card').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     setStoredTheme(theme);
     applyTheme(theme);
