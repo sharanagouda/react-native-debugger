@@ -63,7 +63,7 @@
     "productName": "ReactoRadar",
     "mac": {
       "category": "public.app-category.developer-tools",
-      "icon": "rn_debuggerIcon.png",
+      "icon": "ReactoRadar.png",
       "target": [
         "dmg",
         "zip"

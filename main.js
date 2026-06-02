@@ -31,7 +31,7 @@ app.whenReady().then(async () => {
   // Set dock icon on macOS
   if (process.platform === 'darwin') {
     try {
-      const iconPath = path.join(__dirname, 'rn_debuggerIcon.png');
+      const iconPath = path.join(__dirname, 'ReactoRadar.png');
       const icon = nativeImage.createFromPath(iconPath);
       if (!icon.isEmpty()) {
         app.dock.setIcon(icon);
@@ -85,7 +85,7 @@ async function createMainWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
     },
-    icon: nativeImage.createFromPath(path.join(__dirname, 'rn_debuggerIcon.png')),
+    icon: nativeImage.createFromPath(path.join(__dirname, 'ReactoRadar.png')),
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
