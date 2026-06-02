@@ -1405,7 +1405,7 @@ function buildCurlCommand(r) {
 // ─────────────────────────────────────────────────────────────────────────────
 // GA4 EVENT INSPECTOR
 // ─────────────────────────────────────────────────────────────────────────────
-const ga4State = { events: [], selected: -1, searchFilter: '', tagFilter: 'all' };
+const ga4State = { events: [], selected: -1, searchFilter: '', sortDir: 'desc' };
 
 function initGA4Panel() {
   const panel = $('panel-ga4');
@@ -1418,7 +1418,7 @@ function initGA4Panel() {
     <div class="ga4-layout">
       <div class="ga4-list-pane">
         <div class="ga4-list-header">
-          <span class="ga4-hcell" style="width:90px">Time</span>
+          <span class="ga4-hcell ga4-sort-btn" id="ga4SortBtn" style="width:90px;cursor:pointer" title="Click to toggle sort order">Time <span id="ga4SortIcon">\u25BC</span></span>
           <span class="ga4-hcell" style="flex:1">Event</span>
         </div>
         <div class="scroll-area" id="ga4List">
@@ -1443,6 +1443,12 @@ function initGA4Panel() {
 
   $('ga4Search').addEventListener('input', (e) => {
     ga4State.searchFilter = e.target.value.toLowerCase().trim();
+    renderGA4List();
+  });
+
+  $('ga4SortBtn').addEventListener('click', () => {
+    ga4State.sortDir = ga4State.sortDir === 'desc' ? 'asc' : 'desc';
+    $('ga4SortIcon').textContent = ga4State.sortDir === 'desc' ? '\u25BC' : '\u25B2';
     renderGA4List();
   });
 
@@ -1496,17 +1502,22 @@ function renderGA4List() {
   const empty = $('ga4Empty');
   if (!list) return;
 
-  const { searchFilter } = ga4State;
-  const visible = ga4State.events.filter(e =>
+  const { searchFilter, sortDir } = ga4State;
+  let visible = ga4State.events.filter(e =>
     !searchFilter || e.name.toLowerCase().includes(searchFilter)
   );
+
+  // Sort: newest first (desc) or oldest first (asc)
+  if (sortDir === 'desc') {
+    visible = [...visible].reverse();
+  }
 
   empty.style.display = visible.length ? 'none' : 'flex';
   list.querySelectorAll('.ga4-row').forEach(e => e.remove());
 
   // Cap at 500 rows
   const MAX = 500;
-  const toRender = visible.length > MAX ? visible.slice(-MAX) : visible;
+  const toRender = visible.length > MAX ? visible.slice(0, MAX) : visible;
 
   const frag = document.createDocumentFragment();
   toRender.forEach(e => {
@@ -1538,9 +1549,6 @@ function renderGA4List() {
     frag.appendChild(row);
   });
   list.appendChild(frag);
-
-  // Scroll to bottom
-  list.scrollTop = list.scrollHeight;
 }
 
 function renderGA4Detail(e) {

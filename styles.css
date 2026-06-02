@@ -1280,8 +1280,8 @@ mark { background: rgba(79,172,255,.2); color: var(--accent); border-radius: 2px
 .ga4-resize-handle:hover { background: var(--accent); opacity: 0.5; }
 
 .ga4-detail-pane {
-  width: 55%;
-  min-width: 200px;
+  width: 60%;
+  min-width: 350px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1301,6 +1301,8 @@ mark { background: rgba(79,172,255,.2); color: var(--accent); border-radius: 2px
   flex-shrink: 0;
 }
 .ga4-hcell { padding: 3px 6px; }
+.ga4-sort-btn:hover { color: var(--accent); }
+.ga4-sort-btn span { font-size: 8px; color: var(--accent); }
 
 .ga4-row {
   display: flex;
@@ -1339,15 +1341,18 @@ mark { background: rgba(79,172,255,.2); color: var(--accent); border-radius: 2px
 
 .ga4-param-row {
   display: flex;
-  gap: 12px;
-  padding: 3px 0;
+  gap: 8px;
+  padding: 4px 0;
   font-size: 11px;
   border-bottom: 1px solid var(--border);
   align-items: flex-start;
 }
 .ga4-param-row:last-child { border-bottom: none; }
-.ga4-param-key { color: var(--accent); min-width: 160px; flex-shrink: 0; font-weight: 500; padding-top: 1px; }
-.ga4-param-val { color: var(--text); word-break: break-word; flex: 1; min-width: 0; white-space: normal; }
+.ga4-param-key { color: var(--accent); width: 180px; min-width: 180px; flex-shrink: 0; font-weight: 500; padding-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ga4-param-val { color: var(--text); flex: 1; min-width: 0; }
+.ga4-param-val .ov-node, .ga4-param-val .ov-leaf { white-space: normal; }
+.ga4-param-val .ov-key { white-space: nowrap; }
+.ga4-param-val .ov-header { flex-wrap: nowrap; }
 
 /* Summary bar */
 .ga4-summary {
