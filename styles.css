@@ -1270,8 +1270,8 @@ mark { background: rgba(79,172,255,.2); color: var(--accent); border-radius: 2px
 .ga4-layout { display: flex; flex: 1; overflow: hidden; }
 .ga4-list-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 .ga4-detail-pane {
-  width: 45%;
-  min-width: 280px;
+  width: 55%;
+  min-width: 350px;
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -1307,9 +1307,8 @@ mark { background: rgba(79,172,255,.2); color: var(--accent); border-radius: 2px
 
 .ga4-cell { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ga4-time { width: 90px; color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
-.ga4-tag { width: 50px; color: var(--accent); font-size: 10px; font-weight: 600; flex-shrink: 0; }
 .ga4-name { flex: 1; color: var(--text-bright); font-weight: 500; min-width: 0; }
-.ga4-status { width: 70px; color: var(--green); font-size: 10px; flex-shrink: 0; }
+.ga4-source { width: 140px; color: var(--accent2); font-size: 10px; flex-shrink: 0; }
 
 /* Detail pane */
 .ga4-detail-header {
@@ -1339,8 +1338,8 @@ mark { background: rgba(79,172,255,.2); color: var(--accent); border-radius: 2px
   align-items: flex-start;
 }
 .ga4-param-row:last-child { border-bottom: none; }
-.ga4-param-key { color: var(--accent); min-width: 140px; flex-shrink: 0; font-weight: 500; padding-top: 1px; }
-.ga4-param-val { color: var(--text); word-break: break-all; flex: 1; min-width: 0; }
+.ga4-param-key { color: var(--accent); min-width: 160px; flex-shrink: 0; font-weight: 500; padding-top: 1px; }
+.ga4-param-val { color: var(--text); word-break: break-word; flex: 1; min-width: 0; white-space: normal; }
 
 /* Summary bar */
 .ga4-summary {

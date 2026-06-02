@@ -559,7 +559,18 @@ try {
           if (params && typeof params === 'object') {
             try { safeParams = JSON.parse(JSON.stringify(params)); } catch { safeParams = {}; }
           }
-          mainCh.send({ type: 'ga4', name: eventName, params: safeParams || {}, tag: 'GA4' });
+          // Capture caller source for "fired from" display
+          let source = '';
+          try {
+            const stack = (new Error().stack || '').split('\n');
+            for (let i = 1; i < Math.min(stack.length, 15); i++) {
+              const frame = stack[i]?.trim() || '';
+              if (!frame || /RNDebugSDK|native\)|anonymous\(|logEvent/.test(frame)) continue;
+              const m = frame.match(/at\s+(\w[\w.]*)/);
+              if (m && m[1].length > 2) { source = m[1]; break; }
+            }
+          } catch {}
+          mainCh.send({ type: 'ga4', name: eventName, params: safeParams || {}, tag: 'GA4', source });
         } catch {}
         return _origLogEvent.call(this, eventName, params);
       };
@@ -588,6 +599,28 @@ try {
       setTimeout(() => patchAnalytics(), delay);
     });
   }
+
+  // Fallback: also patch the module's default export function to wrap returned instances
+  setTimeout(() => {
+    try {
+      const mod = require('@react-native-firebase/analytics');
+      if (!mod || mod.__reactoRadarWrapped) return;
+      const origDefault = mod.default;
+      if (typeof origDefault !== 'function') return;
+      mod.__reactoRadarWrapped = true;
+      mod.default = function() {
+        const inst = origDefault.apply(this, arguments);
+        // Ensure prototype is patched (in case new prototype was created)
+        if (inst && inst.logEvent) {
+          const p = Object.getPrototypeOf(inst);
+          if (p && !p.__reactoRadarPatched) patchAnalytics();
+        }
+        return inst;
+      };
+      // Copy static properties
+      Object.keys(origDefault).forEach(k => { mod.default[k] = origDefault[k]; });
+    } catch {}
+  }, 50);
 })();
 
 console.log(`[RNDebugSDK] Connected to ${HOST} | Console+Network:${PORTS.NETWORK_AND_CONSOLE} Redux:${PORTS.REDUX} Storage:${PORTS.STORAGE}`);

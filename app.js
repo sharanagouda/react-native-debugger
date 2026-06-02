@@ -1413,17 +1413,14 @@ function initGA4Panel() {
     <div class="panel-toolbar">
       <span class="panel-label">GA4 Events</span>
       <span class="badge" id="ga4Badge">0</span>
-      <div class="ml-auto" style="display:flex;align-items:center;gap:8px">
-        <input id="ga4Search" class="net-search-input" placeholder="Filter events..." />
-      </div>
+      <input id="ga4Search" class="net-search-input" style="margin-left:12px" placeholder="Filter events..." />
     </div>
     <div class="ga4-layout">
       <div class="ga4-list-pane">
         <div class="ga4-list-header">
           <span class="ga4-hcell" style="width:90px">Time</span>
-          <span class="ga4-hcell" style="width:50px">Tag</span>
           <span class="ga4-hcell" style="flex:1">Event</span>
-          <span class="ga4-hcell" style="width:70px">Status</span>
+          <span class="ga4-hcell" style="width:140px">Source</span>
         </div>
         <div class="scroll-area" id="ga4List">
           <div class="empty-state" id="ga4Empty">
@@ -1455,6 +1452,7 @@ function handleGA4Event(event) {
     name: event.name || '?',
     params: event.params || {},
     tag: event.tag || 'GA4',
+    source: event.source || '',
     ts: event.ts || Date.now(),
     index: ga4State.events.length,
   });
@@ -1496,9 +1494,8 @@ function renderGA4List() {
 
     row.innerHTML = `
       <span class="ga4-cell ga4-time">${time}</span>
-      <span class="ga4-cell ga4-tag">[${esc(e.tag)}]</span>
       <span class="ga4-cell ga4-name">${esc(e.name)}</span>
-      <span class="ga4-cell ga4-status">✓ fired</span>`;
+      <span class="ga4-cell ga4-source">${esc(e.source)}</span>`;
 
     row.addEventListener('click', () => {
       ga4State.selected = e.index;
@@ -1538,7 +1535,7 @@ function renderGA4Detail(e) {
   header.innerHTML = `
     <div class="ga4-detail-row"><span class="ga4-detail-key">Event Name</span><span class="ga4-detail-val" style="color:var(--accent);font-weight:600">${esc(e.name)}</span></div>
     <div class="ga4-detail-row"><span class="ga4-detail-key">Timestamp</span><span class="ga4-detail-val">${time}</span></div>
-    <div class="ga4-detail-row"><span class="ga4-detail-key">Tag</span><span class="ga4-detail-val">${esc(e.tag)}</span></div>`;
+    ${e.source ? '<div class="ga4-detail-row"><span class="ga4-detail-key">Fired From</span><span class="ga4-detail-val" style="color:var(--accent2)">' + esc(e.source) + '</span></div>' : ''}`;
   detail.appendChild(header);
 
   // Separator
