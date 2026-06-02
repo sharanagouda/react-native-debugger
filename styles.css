@@ -369,6 +369,22 @@ body {
 .tab:hover:not(.active) { color: var(--text); }
 .ml-auto { margin-left: auto; }
 
+/* Panel clear button (used in Console, Network, GA4, Redux) */
+.panel-clear-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s;
+  flex-shrink: 0;
+}
+.panel-clear-btn:hover { border-color: var(--red); color: var(--red); }
+
 /* Console level dropdown */
 .console-level-dropdown { position: relative; }
 .console-level-btn {
@@ -453,22 +469,22 @@ body {
    CONSOLE PANEL
 ───────────────────────────────────────────────────────────────────────────── */
 .log-row {
-  display: grid;
-  grid-template-columns: 58px 44px 1fr;
-  gap: 8px;
-  align-items: baseline;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 4px 14px;
   border-bottom: 1px solid transparent;
   transition: background 0.08s;
   cursor: default;
+  overflow: hidden;
 }
 .log-row:hover { background: var(--bg3); }
 .log-row.warn  { background: rgba(245,200,66,.03); border-bottom-color: rgba(245,200,66,.06); }
 .log-row.error { background: rgba(255,94,114,.04); border-bottom-color: rgba(255,94,114,.07); }
 
-.log-time { color: var(--text-dim); font-size: 10px; white-space: nowrap; }
+.log-time { color: var(--text-dim); font-size: 10px; white-space: nowrap; flex-shrink: 0; }
 
-.lvl-badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+.lvl-badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
 .lvl-log   { background: rgba(200,210,230,.07); color: var(--text-dim); }
 .lvl-info  { background: rgba(79,172,255,.12);  color: var(--accent); }
 .lvl-warn  { background: rgba(245,200,66,.12);  color: var(--yellow); }
@@ -480,25 +496,25 @@ body {
   flex-direction: column;
   cursor: pointer;
   min-width: 0;
+  flex: 1;
 }
 .log-arrow {
   display: inline-block;
-  width: 14px;
+  width: 12px;
   font-size: 8px;
   color: var(--text-dim);
   flex-shrink: 0;
   user-select: none;
   -webkit-user-select: none;
-  margin-bottom: 1px;
 }
 .log-arrow.expanded { color: var(--accent); }
 .log-preview {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
   color: var(--text);
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 1.4;
   overflow: hidden;
   white-space: nowrap;
   user-select: text;

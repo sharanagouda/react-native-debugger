@@ -106,8 +106,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 
 // Global filter removed — each panel has its own search input
 
-// ─── Clear (active tab only) ──────────────────────────────────────────────────
-$('btnClear').addEventListener('click', clearActiveTab);
+// ─── Clear (each panel has its own clear button now) ─────────────────────────
 
 function clearActiveTab() {
   switch (state.activePanel) {
@@ -317,6 +316,7 @@ function initConsolePanel() {
       <span class="badge" id="cBadge">0</span>
       <input id="consoleSearch" class="net-search-input" style="margin-left:12px" placeholder="Filter logs..." />
       <div class="ml-auto" style="display:flex;align-items:center;gap:6px">
+        <button class="panel-clear-btn" id="consoleClear" title="Clear console">Clear</button>
         <div class="console-level-dropdown" id="consoleLevelDropdown">
           <button class="console-level-btn" id="consoleLevelBtn">Levels ▾</button>
           <div class="console-level-menu" id="consoleLevelMenu">
@@ -369,6 +369,13 @@ function initConsolePanel() {
   });
 
   updateLevelBtnText();
+
+  $('consoleClear').addEventListener('click', () => {
+    state.console.logs = [];
+    _consolePending = [];
+    $('cBadge').textContent = '0';
+    renderConsole();
+  });
 }
 
 function updateLevelBtnText() {
@@ -871,6 +878,7 @@ function initNetworkPanel() {
       <span class="panel-label">Network</span>
       <span class="badge" id="nBadge">0</span>
       <div class="ml-auto" style="display:flex;align-items:center;gap:6px">
+        <button class="panel-clear-btn" id="networkClear" title="Clear network">Clear</button>
         <label class="toggle-label" for="netToggle">
           <span class="toggle-text" id="netToggleText">Capture ON</span>
           <input type="checkbox" id="netToggle" class="toggle-input" checked />
@@ -947,6 +955,16 @@ function initNetworkPanel() {
     state.network.throttle = e.target.value;
     // Send throttle config to the RN app
     window.electronAPI?.setNetworkThrottle(state.network.throttle);
+  });
+
+  // Clear network
+  $('networkClear').addEventListener('click', () => {
+    state.network.requests = {};
+    state.network.order = [];
+    state.network.selectedId = null;
+    closeNetDetail();
+    $('nBadge').textContent = '0';
+    renderNetwork();
   });
 
   // Close detail button
@@ -1455,6 +1473,9 @@ function initGA4Panel() {
       <span class="panel-label">GA4 Events</span>
       <span class="badge" id="ga4Badge">0</span>
       <input id="ga4Search" class="net-search-input" style="margin-left:12px" placeholder="Filter events..." />
+      <div class="ml-auto">
+        <button class="panel-clear-btn" id="ga4Clear" title="Clear GA4 events">Clear</button>
+      </div>
     </div>
     <div class="ga4-layout">
       <div class="ga4-list-pane">
@@ -1486,6 +1507,14 @@ function initGA4Panel() {
     ga4State.searchFilter = e.target.value.toLowerCase().trim();
     renderGA4List();
     renderGA4Summary(); // update active chip highlight
+  });
+
+  $('ga4Clear').addEventListener('click', () => {
+    ga4State.events = [];
+    ga4State.selected = -1;
+    $('ga4Badge').textContent = '0';
+    renderGA4List();
+    renderGA4Summary();
   });
 
   $('ga4SortBtn').addEventListener('click', () => {
@@ -1708,8 +1737,9 @@ function initReduxPanel() {
     <div class="panel-toolbar">
       <span class="panel-label">Redux</span>
       <span class="badge" id="rBadge">0</span>
+      <input id="reduxSearch" class="net-search-input" style="margin-left:12px" placeholder="Filter actions..." />
       <div class="ml-auto" style="display:flex;align-items:center;gap:8px">
-        <input id="reduxSearch" class="net-search-input" placeholder="Filter actions..." />
+        <button class="panel-clear-btn" id="reduxClear" title="Clear redux">Clear</button>
         <div class="time-travel-bar" style="border:none;padding:0;margin:0">
           <button class="tt-btn" onclick="reduxJumpTo(state.redux.selected-1)">◀</button>
           <span class="tt-label" id="ttLabel">—/—</span>
@@ -1727,6 +1757,14 @@ function initReduxPanel() {
 
   $('reduxSearch').addEventListener('input', (e) => {
     state.redux.searchFilter = e.target.value.toLowerCase().trim();
+    renderRedux();
+  });
+
+  $('reduxClear').addEventListener('click', () => {
+    state.redux.actions = [];
+    state.redux.states = [];
+    state.redux.selected = -1;
+    $('rBadge').textContent = '0';
     renderRedux();
   });
 }
