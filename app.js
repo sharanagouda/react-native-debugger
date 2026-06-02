@@ -225,6 +225,19 @@ if (window.electronAPI) {
 
   window.electronAPI.on('clear-all-ui', clearAll);
 
+  window.electronAPI.on('update-available', ({ current, latest }) => {
+    const banner = document.createElement('div');
+    banner.className = 'update-banner';
+    banner.innerHTML = `New version <b>v${latest}</b> available (current: v${current}).
+      <a class="update-link" id="updateLink">Download update</a>
+      <span class="update-dismiss" id="updateDismiss">&times;</span>`;
+    document.getElementById('app').prepend(banner);
+    $('updateLink')?.addEventListener('click', () => {
+      window.electronAPI?.openExternal('https://github.com/sharanagouda/react-native-debugger/releases');
+    });
+    $('updateDismiss')?.addEventListener('click', () => banner.remove());
+  });
+
   window.electronAPI.on('trigger-open-cdp', () => {
     window.electronAPI?.openCDPTarget(null);
   });

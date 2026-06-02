@@ -42,6 +42,9 @@ app.whenReady().then(async () => {
   }
 
   await createMainWindow();
+
+  // Check for updates (non-blocking)
+  checkForUpdates();
   startBridgeServers();
   startReactDevToolsServer();
   setupMetroCDPProxy();
@@ -91,6 +94,26 @@ async function createMainWindow() {
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.send('ports', PORTS);
   });
+}
+
+// ─── Update Checker ──────────────────────────────────────────────────────────
+function checkForUpdates() {
+  const currentVersion = require('./package.json').version;
+  https = require('https');
+  https.get('https://registry.npmjs.org/rn-debugger-app/latest', (res) => {
+    let data = '';
+    res.on('data', d => data += d);
+    res.on('end', () => {
+      try {
+        const latest = JSON.parse(data).version;
+        if (latest && latest !== currentVersion) {
+          // Notify the renderer to show an update banner
+          mainWindow?.webContents.send('update-available', { current: currentVersion, latest });
+          console.log(`[Update] New version available: ${latest} (current: ${currentVersion})`);
+        }
+      } catch {}
+    });
+  }).on('error', () => {}); // Silently fail — update check is optional
 }
 
 // ─── CDP DevTools Window (JS breakpoints, Sources, Console) ──────────────────
