@@ -829,8 +829,17 @@ body {
 .kv-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
 .kv-key { color: var(--accent); font-size: 11px; }
 .kv-val { color: var(--text); word-break: break-all; font-size: 11px; }
-.section-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); margin-bottom: 6px; margin-top: 10px; }
-.section-label:first-child { margin-top: 0; }
+.section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  margin-top: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.section-label:first-child { border-top: none; padding-top: 0; }
 
 /* Context menu */
 .ctx-menu {

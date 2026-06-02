@@ -846,13 +846,13 @@ function renderConsole() {
 // NETWORK PANEL (Chrome DevTools-style)
 // ─────────────────────────────────────────────────────────────────────────────
 const NET_COLS = [
-  { key: 'name',      label: 'Name',      width: 260, min: 100 },
+  { key: 'name',      label: 'Name',      width: 380, min: 150 },
   { key: 'status',    label: 'Status',    width: 60,  min: 40 },
   { key: 'type',      label: 'Type',      width: 70,  min: 40 },
-  { key: 'initiator', label: 'Initiator', width: 90,  min: 50 },
-  { key: 'size',      label: 'Size',      width: 70,  min: 40 },
-  { key: 'time',      label: 'Time',      width: 70,  min: 40 },
-  { key: 'waterfall', label: 'Waterfall', width: 120, min: 60 },
+  { key: 'initiator', label: 'Initiator', width: 80,  min: 50 },
+  { key: 'size',      label: 'Size',      width: 65,  min: 40 },
+  { key: 'time',      label: 'Time',      width: 65,  min: 40 },
+  { key: 'waterfall', label: 'Waterfall', width: 100, min: 60 },
 ];
 
 function initNetworkPanel() {
@@ -1068,13 +1068,15 @@ function matchNetType(r, type) {
   const ct = (r.responseHeaders?.['content-type'] || r.responseHeaders?.['Content-Type'] || '').toLowerCase();
   const url = (r.url || '').toLowerCase();
   switch (type) {
-    case 'fetch': return true; // All XHR/fetch requests pass
-    case 'js':    return ct.includes('javascript') || url.endsWith('.js') || url.endsWith('.bundle');
-    case 'css':   return ct.includes('css') || url.endsWith('.css');
-    case 'img':   return ct.includes('image') || /\.(png|jpg|jpeg|gif|svg|webp|ico)(\?|$)/i.test(url);
-    case 'media':  return ct.includes('video') || ct.includes('audio') || /\.(mp4|mp3|wav|webm)(\?|$)/i.test(url);
-    case 'font':  return ct.includes('font') || /\.(woff2?|ttf|otf|eot)(\?|$)/i.test(url);
-    case 'doc':   return ct.includes('html') || ct.includes('xml');
+    case 'fetch': // Fetch/XHR — show API calls (JSON, text, form data), exclude static assets
+      return !ct.includes('image') && !ct.includes('font') && !ct.includes('video') && !ct.includes('audio')
+        && !/\.(png|jpg|jpeg|gif|svg|webp|ico|woff2?|ttf|otf|eot|mp4|mp3|css)(\?|$)/.test(url);
+    case 'js':    return ct.includes('javascript') || /\.(js|jsx|bundle)(\?|$)/.test(url);
+    case 'css':   return ct.includes('css') || /\.css(\?|$)/.test(url);
+    case 'img':   return ct.includes('image') || /\.(png|jpg|jpeg|gif|svg|webp|ico|avif|bmp)(\?|$)/.test(url);
+    case 'media': return ct.includes('video') || ct.includes('audio') || /\.(mp4|mp3|wav|webm|ogg|m3u8)(\?|$)/.test(url);
+    case 'font':  return ct.includes('font') || /\.(woff2?|ttf|otf|eot)(\?|$)/.test(url);
+    case 'doc':   return ct.includes('html') || ct.includes('xml') || /\.(html?|xml)(\?|$)/.test(url);
     case 'ws':    return url.startsWith('ws://') || url.startsWith('wss://');
     default:      return true;
   }
