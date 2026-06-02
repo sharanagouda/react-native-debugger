@@ -257,8 +257,8 @@ if (window.electronAPI) {
 
   window.electronAPI.on('app-version', (version) => {
     state._appVersion = version;
-    const el = $('aboutVersion');
-    if (el) el.textContent = 'v' + version;
+    // Update anywhere the version is displayed
+    document.querySelectorAll('#aboutVersion').forEach(el => el.textContent = 'v' + version);
   });
 
   window.electronAPI.on('update-available', ({ current, latest }) => {
@@ -2329,7 +2329,7 @@ function initSettingsPanel() {
           <div class="settings-section-title">About</div>
           <div class="settings-about">
             <div class="about-name" id="aboutAppName">${getStoredAppName()}</div>
-            <div class="about-version" id="aboutVersion">v1.5.1</div>
+            <div class="about-version" id="aboutVersion">v${state._appVersion || '...'}</div>
             <div class="about-desc">A standalone macOS debugger for React Native apps.<br/>Supports Hermes, New Architecture, and React Native 0.74+.</div>
             <div class="about-links" style="display:flex;gap:16px;justify-content:center">
               <span class="about-link" id="linkGithub">GitHub</span>

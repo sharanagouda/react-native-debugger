@@ -38,10 +38,18 @@ app.whenReady().then(async () => {
 
   await createMainWindow();
 
-  // Send version to renderer (delay to ensure IPC listeners are registered)
-  const appVersion = require('./package.json').version;
+  // Send version to renderer — try package.json, fallback to app.getVersion()
+  let appVersion;
+  try { appVersion = require('./package.json').version; } catch { appVersion = app.getVersion(); }
+  // Send multiple times to ensure renderer catches it
   mainWindow?.webContents.on('did-finish-load', () => {
-    setTimeout(() => mainWindow?.webContents.send('app-version', appVersion), 500);
+    [200, 1000, 3000].forEach(delay => {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('app-version', appVersion);
+        }
+      }, delay);
+    });
   });
 
   // Check for updates (non-blocking)
