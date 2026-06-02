@@ -691,27 +691,23 @@ function buildLogRow(l) {
   lvlSpan.textContent = l.level;
   div.appendChild(lvlSpan);
 
-  // Body wrapper with preview (collapsed) and full (expanded)
+  // Arrow (inline, not inside body-wrap)
+  const arrow = document.createElement('span');
+  arrow.className = 'log-arrow';
+  arrow.textContent = '\u25B6';
+  div.appendChild(arrow);
+
+  // Body wrapper
   const bodyWrap = document.createElement('div');
   bodyWrap.className = 'log-body-wrap';
 
-  // Single-line preview with caller at end
+  // Single-line preview: message text + caller
   const preview = document.createElement('div');
   preview.className = 'log-preview';
   const msgText = (l.message || '').replace(/\n/g, ' ').slice(0, 200);
   const previewText = document.createElement('span');
   previewText.textContent = msgText + ((l.message || '').length > 200 ? '...' : '');
   preview.appendChild(previewText);
-  if (l.caller) {
-    // Extract short filename:line from caller like "at Component (file.js:42:10)"
-    const callerShort = extractCallerShort(l.caller);
-    if (callerShort) {
-      const callerTag = document.createElement('span');
-      callerTag.className = 'log-caller-inline';
-      callerTag.textContent = callerShort;
-      preview.appendChild(callerTag);
-    }
-  }
   bodyWrap.appendChild(preview);
 
   // Full content (hidden by default)
@@ -719,19 +715,7 @@ function buildLogRow(l) {
   full.className = 'log-full';
   full.style.display = 'none';
   full.appendChild(buildLogBody(l));
-  if (l.caller) {
-    const callerSpan = document.createElement('span');
-    callerSpan.className = 'log-caller';
-    callerSpan.textContent = l.caller;
-    full.appendChild(callerSpan);
-  }
   bodyWrap.appendChild(full);
-
-  // Expand/collapse arrow
-  const arrow = document.createElement('span');
-  arrow.className = 'log-arrow';
-  arrow.textContent = '\u25B6';
-  bodyWrap.prepend(arrow);
 
   let expanded = false;
   // Only toggle on click, NOT on text selection drag
