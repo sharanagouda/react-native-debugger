@@ -74,6 +74,8 @@ brew install --cask rn-debugger
 
 Download the `.dmg` from the [Releases](https://github.com/sharanagouda/react-native-debugger/releases) page.
 
+> **macOS Gatekeeper warning**: Since the app isn't notarized with Apple, you'll see "Apple could not verify" on first launch. To open it: **right-click the app → Open → Open**. Or run: `xattr -cr "/Applications/RN Debugger.app"`
+
 ### Build from source
 
 ```bash
