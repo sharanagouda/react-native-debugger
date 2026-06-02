@@ -55,10 +55,8 @@ switch (command) {
   case 'install': {
     const setupScript = path.join(appDir, 'bin', 'setup.js');
     const projectPath = args[1] || process.cwd();
-    require(setupScript);
-    // setup.js handles its own argv — re-run with the right args
+    // Set argv BEFORE requiring setup.js so it reads the correct path
     process.argv = [process.argv[0], setupScript, projectPath];
-    delete require.cache[require.resolve(setupScript)];
     require(setupScript);
     break;
   }
