@@ -559,18 +559,7 @@ try {
           if (params && typeof params === 'object') {
             try { safeParams = JSON.parse(JSON.stringify(params)); } catch { safeParams = {}; }
           }
-          // Capture caller source for "fired from" display
-          let source = '';
-          try {
-            const stack = (new Error().stack || '').split('\n');
-            for (let i = 1; i < Math.min(stack.length, 15); i++) {
-              const frame = stack[i]?.trim() || '';
-              if (!frame || /RNDebugSDK|native\)|anonymous\(|logEvent/.test(frame)) continue;
-              const m = frame.match(/at\s+(\w[\w.]*)/);
-              if (m && m[1].length > 2) { source = m[1]; break; }
-            }
-          } catch {}
-          mainCh.send({ type: 'ga4', name: eventName, params: safeParams || {}, tag: 'GA4', source });
+          mainCh.send({ type: 'ga4', name: eventName, params: safeParams || {}, tag: 'GA4' });
         } catch {}
         return _origLogEvent.call(this, eventName, params);
       };

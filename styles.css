@@ -1269,10 +1269,19 @@ mark { background: rgba(79,172,255,.2); color: var(--accent); border-radius: 2px
 ───────────────────────────────────────────────────────────────────────────── */
 .ga4-layout { display: flex; flex: 1; overflow: hidden; }
 .ga4-list-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+/* Resize handle between list and detail */
+.ga4-resize-handle {
+  width: 5px;
+  cursor: col-resize;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.ga4-resize-handle:hover { background: var(--accent); opacity: 0.5; }
+
 .ga4-detail-pane {
   width: 55%;
-  min-width: 350px;
-  border-left: 1px solid var(--border);
+  min-width: 200px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1308,7 +1317,6 @@ mark { background: rgba(79,172,255,.2); color: var(--accent); border-radius: 2px
 .ga4-cell { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ga4-time { width: 90px; color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
 .ga4-name { flex: 1; color: var(--text-bright); font-weight: 500; min-width: 0; }
-.ga4-source { width: 140px; color: var(--accent2); font-size: 10px; flex-shrink: 0; }
 
 /* Detail pane */
 .ga4-detail-header {

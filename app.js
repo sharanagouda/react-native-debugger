@@ -1420,7 +1420,6 @@ function initGA4Panel() {
         <div class="ga4-list-header">
           <span class="ga4-hcell" style="width:90px">Time</span>
           <span class="ga4-hcell" style="flex:1">Event</span>
-          <span class="ga4-hcell" style="width:140px">Source</span>
         </div>
         <div class="scroll-area" id="ga4List">
           <div class="empty-state" id="ga4Empty">
@@ -1430,6 +1429,7 @@ function initGA4Panel() {
           </div>
         </div>
       </div>
+      <div class="ga4-resize-handle" id="ga4ResizeHandle"></div>
       <div class="ga4-detail-pane" id="ga4DetailPane">
         <div class="ga4-detail-header">EVENT DETAIL</div>
         <div class="scroll-area ga4-detail-content" id="ga4Detail">
@@ -1444,6 +1444,29 @@ function initGA4Panel() {
   $('ga4Search').addEventListener('input', (e) => {
     ga4State.searchFilter = e.target.value.toLowerCase().trim();
     renderGA4List();
+  });
+
+  // Resizable divider between list and detail
+  const resizeHandle = $('ga4ResizeHandle');
+  const detailPane = $('ga4DetailPane');
+  resizeHandle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = detailPane.offsetWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    function onMove(ev) {
+      const delta = startX - ev.clientX;
+      detailPane.style.width = Math.max(200, Math.min(window.innerWidth * 0.8, startWidth + delta)) + 'px';
+    }
+    function onUp() {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   });
 }
 
@@ -1494,8 +1517,7 @@ function renderGA4List() {
 
     row.innerHTML = `
       <span class="ga4-cell ga4-time">${time}</span>
-      <span class="ga4-cell ga4-name">${esc(e.name)}</span>
-      <span class="ga4-cell ga4-source">${esc(e.source)}</span>`;
+      <span class="ga4-cell ga4-name">${esc(e.name)}</span>`;
 
     row.addEventListener('click', () => {
       ga4State.selected = e.index;
@@ -1535,7 +1557,7 @@ function renderGA4Detail(e) {
   header.innerHTML = `
     <div class="ga4-detail-row"><span class="ga4-detail-key">Event Name</span><span class="ga4-detail-val" style="color:var(--accent);font-weight:600">${esc(e.name)}</span></div>
     <div class="ga4-detail-row"><span class="ga4-detail-key">Timestamp</span><span class="ga4-detail-val">${time}</span></div>
-    ${e.source ? '<div class="ga4-detail-row"><span class="ga4-detail-key">Fired From</span><span class="ga4-detail-val" style="color:var(--accent2)">' + esc(e.source) + '</span></div>' : ''}`;
+`;
   detail.appendChild(header);
 
   // Separator
