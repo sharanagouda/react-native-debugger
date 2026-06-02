@@ -6,7 +6,7 @@ const state = {
   activePanel: 'console',
   ports: {},
 
-  console: { logs: [], levelFilter: 'all', searchFilter: '', stackTraceEnabled: false },
+  console: { logs: [], levelFilters: { log: true, info: true, warn: true, error: true, debug: true }, searchFilter: '' },
 
   network: {
     requests: {},
@@ -294,26 +294,39 @@ function updateDeviceBanner(service, connected) {
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSOLE PANEL
 // ─────────────────────────────────────────────────────────────────────────────
+// Load saved log level filters from localStorage
+function getStoredLogLevels() {
+  try {
+    const saved = localStorage.getItem('rn-debug-log-levels');
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return { log: true, info: true, warn: true, error: true, debug: true };
+}
+function setStoredLogLevels(levels) {
+  try { localStorage.setItem('rn-debug-log-levels', JSON.stringify(levels)); } catch {}
+}
+
 function initConsolePanel() {
   const panel = $('panel-console');
+  const levels = getStoredLogLevels();
+  state.console.levelFilters = levels;
+
   panel.innerHTML = `
     <div class="panel-toolbar">
       <span class="panel-label">Console</span>
       <span class="badge" id="cBadge">0</span>
-      <div class="tab-row" style="margin-left:12px">
-        <button class="tab active" onclick="setConsoleLevel('all',this)">All</button>
-        <button class="tab" onclick="setConsoleLevel('log',this)">Log</button>
-        <button class="tab" onclick="setConsoleLevel('info',this)">Info</button>
-        <button class="tab" onclick="setConsoleLevel('warn',this)">Warn</button>
-        <button class="tab" onclick="setConsoleLevel('error',this)">Error</button>
-      </div>
-      <div class="ml-auto" style="display:flex;align-items:center;gap:8px">
-        <input id="consoleSearch" class="net-search-input" placeholder="Filter logs..." />
-        <label class="toggle-label" for="stackTraceToggle" title="Capture stack trace (caller file:line) — disabled by default for performance">
-          <span class="toggle-text" id="stackTraceText">Stack OFF</span>
-          <input type="checkbox" id="stackTraceToggle" class="toggle-input" />
-          <span class="toggle-slider"></span>
-        </label>
+      <input id="consoleSearch" class="net-search-input" style="margin-left:12px" placeholder="Filter logs..." />
+      <div class="ml-auto" style="display:flex;align-items:center;gap:6px">
+        <div class="console-level-dropdown" id="consoleLevelDropdown">
+          <button class="console-level-btn" id="consoleLevelBtn">Levels ▾</button>
+          <div class="console-level-menu" id="consoleLevelMenu">
+            <label class="console-level-option"><input type="checkbox" data-level="log" ${levels.log ? 'checked' : ''} /><span class="lvl-dot" style="background:var(--text-mid)"></span>Log</label>
+            <label class="console-level-option"><input type="checkbox" data-level="info" ${levels.info ? 'checked' : ''} /><span class="lvl-dot" style="background:var(--accent)"></span>Info</label>
+            <label class="console-level-option"><input type="checkbox" data-level="warn" ${levels.warn ? 'checked' : ''} /><span class="lvl-dot" style="background:var(--yellow)"></span>Warn</label>
+            <label class="console-level-option"><input type="checkbox" data-level="error" ${levels.error ? 'checked' : ''} /><span class="lvl-dot" style="background:var(--red)"></span>Error</label>
+            <label class="console-level-option"><input type="checkbox" data-level="debug" ${levels.debug ? 'checked' : ''} /><span class="lvl-dot" style="background:var(--accent2)"></span>Debug</label>
+          </div>
+        </div>
       </div>
     </div>
     <div class="scroll-area" id="consoleList">
@@ -324,25 +337,53 @@ function initConsolePanel() {
       </div>
     </div>`;
 
+  // Search filter
   $('consoleSearch').addEventListener('input', (e) => {
     state.console.searchFilter = e.target.value.toLowerCase().trim();
     renderConsole();
   });
 
-  $('stackTraceToggle').addEventListener('change', (e) => {
-    const enabled = e.target.checked;
-    state.console.stackTraceEnabled = enabled;
-    $('stackTraceText').textContent = enabled ? 'Stack ON' : 'Stack OFF';
-    // Tell the SDK to enable/disable stack capture
-    window.electronAPI?.setStackTraceCapture(enabled);
+  // Level dropdown toggle
+  $('consoleLevelBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('consoleLevelMenu').classList.toggle('open');
   });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#consoleLevelDropdown')) {
+      $('consoleLevelMenu')?.classList.remove('open');
+    }
+  });
+
+  // Level checkbox changes
+  $('consoleLevelMenu').addEventListener('change', (e) => {
+    const checkbox = e.target;
+    const level = checkbox.dataset.level;
+    if (level) {
+      state.console.levelFilters[level] = checkbox.checked;
+      setStoredLogLevels(state.console.levelFilters);
+      updateLevelBtnText();
+      renderConsole();
+    }
+  });
+
+  updateLevelBtnText();
 }
-window.setConsoleLevel = (level, btn) => {
-  state.console.levelFilter = level;
-  document.querySelectorAll('#panel-console .tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  renderConsole();
-};
+
+function updateLevelBtnText() {
+  const levels = state.console.levelFilters;
+  const allOn = Object.values(levels).every(v => v);
+  const allOff = Object.values(levels).every(v => !v);
+  const btn = $('consoleLevelBtn');
+  if (!btn) return;
+  if (allOn) btn.textContent = 'All Levels ▾';
+  else if (allOff) btn.textContent = 'None ▾';
+  else {
+    const active = Object.entries(levels).filter(([, v]) => v).map(([k]) => k.charAt(0).toUpperCase() + k.slice(1));
+    btn.textContent = active.join(', ') + ' ▾';
+  }
+}
 
 // Console is fed via IPC (network-event handled in IPC section above)
 
@@ -371,12 +412,12 @@ function flushConsoleBatch() {
   const empty = $('consoleEmpty');
   if (!list) return;
 
-  const { levelFilter, searchFilter } = state.console;
+  const { levelFilters, searchFilter } = state.console;
   const frag = document.createDocumentFragment();
   let added = 0;
 
   batch.forEach(l => {
-    if (levelFilter !== 'all' && l.level !== levelFilter) return;
+    if (levelFilters && !levelFilters[l.level]) return;
     if (searchFilter && !l.message?.toLowerCase().includes(searchFilter)) return;
     frag.appendChild(buildLogRow(l));
     added++;
@@ -783,9 +824,9 @@ function renderConsole() {
   const empty = $('consoleEmpty');
   if (!list) return;
 
-  const { levelFilter, searchFilter } = state.console;
+  const { levelFilters, searchFilter } = state.console;
   const visible = state.console.logs.filter(l => {
-    if (levelFilter !== 'all' && l.level !== levelFilter) return false;
+    if (levelFilters && !levelFilters[l.level]) return false;
     if (searchFilter && !l.message?.toLowerCase().includes(searchFilter)) return false;
     return true;
   });

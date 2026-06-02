@@ -369,6 +369,60 @@ body {
 .tab:hover:not(.active) { color: var(--text); }
 .ml-auto { margin-left: auto; }
 
+/* Console level dropdown */
+.console-level-dropdown { position: relative; }
+.console-level-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: var(--bg3);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.console-level-btn:hover { border-color: var(--accent); }
+.console-level-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 6px 0;
+  min-width: 140px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  z-index: 100;
+}
+.console-level-menu.open { display: block; }
+.console-level-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.08s;
+}
+.console-level-option:hover { background: var(--bg3); }
+.console-level-option input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.lvl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* ── SCROLL AREA ─────────────────────────────────────────────────────────────── */
 .scroll-area { flex: 1; overflow-y: auto; overflow-x: hidden; user-select: text; -webkit-user-select: text; }
 .scroll-area::-webkit-scrollbar { width: 4px; }
