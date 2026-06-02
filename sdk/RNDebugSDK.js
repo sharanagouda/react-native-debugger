@@ -551,29 +551,65 @@ try {
       if (!proto || proto.__reactoRadarPatched) return false;
       proto.__reactoRadarPatched = true;
 
-      // Patch logEvent on the prototype — affects ALL instances
+      // Helper to safely serialize params
+      function _safeParams(p) {
+        if (!p || typeof p !== 'object') return p || {};
+        try { return JSON.parse(JSON.stringify(p)); } catch { return {}; }
+      }
+
+      // Helper to wrap a method on the prototype
+      function _wrapMethod(methodName, eventName) {
+        if (!proto[methodName]) return;
+        const orig = proto[methodName];
+        proto[methodName] = function(params) {
+          try { mainCh.send({ type: 'ga4', name: eventName, params: _safeParams(params), tag: 'GA4' }); } catch {}
+          return orig.call(this, params);
+        };
+      }
+
+      // Patch logEvent (custom events)
       const _origLogEvent = proto.logEvent;
       proto.logEvent = function(eventName, params) {
-        try {
-          let safeParams = params;
-          if (params && typeof params === 'object') {
-            try { safeParams = JSON.parse(JSON.stringify(params)); } catch { safeParams = {}; }
-          }
-          mainCh.send({ type: 'ga4', name: eventName, params: safeParams || {}, tag: 'GA4' });
-        } catch {}
+        try { mainCh.send({ type: 'ga4', name: eventName, params: _safeParams(params), tag: 'GA4' }); } catch {}
         return _origLogEvent.call(this, eventName, params);
       };
 
-      // Patch logScreenView on the prototype
-      if (proto.logScreenView) {
-        const _origScreenView = proto.logScreenView;
-        proto.logScreenView = function(params) {
-          try {
-            mainCh.send({ type: 'ga4', name: 'screen_view', params: JSON.parse(JSON.stringify(params || {})), tag: 'GA4' });
-          } catch {}
-          return _origScreenView.call(this, params);
-        };
-      }
+      // Patch ALL predefined Firebase Analytics methods
+      _wrapMethod('logAddPaymentInfo',      'add_payment_info');
+      _wrapMethod('logAddShippingInfo',     'add_shipping_info');
+      _wrapMethod('logAddToCart',           'add_to_cart');
+      _wrapMethod('logAddToWishlist',       'add_to_wishlist');
+      _wrapMethod('logAppOpen',             'app_open');
+      _wrapMethod('logBeginCheckout',       'begin_checkout');
+      _wrapMethod('logCampaignDetails',     'campaign_details');
+      _wrapMethod('logEarnVirtualCurrency', 'earn_virtual_currency');
+      _wrapMethod('logGenerateLead',        'generate_lead');
+      _wrapMethod('logJoinGroup',           'join_group');
+      _wrapMethod('logLevelEnd',            'level_end');
+      _wrapMethod('logLevelStart',          'level_start');
+      _wrapMethod('logLevelUp',             'level_up');
+      _wrapMethod('logLogin',               'login');
+      _wrapMethod('logPostScore',           'post_score');
+      _wrapMethod('logPurchase',            'purchase');
+      _wrapMethod('logRefund',              'refund');
+      _wrapMethod('logRemoveFromCart',       'remove_from_cart');
+      _wrapMethod('logScreenView',          'screen_view');
+      _wrapMethod('logSearch',              'search');
+      _wrapMethod('logSelectContent',       'select_content');
+      _wrapMethod('logSelectItem',          'select_item');
+      _wrapMethod('logSelectPromotion',     'select_promotion');
+      _wrapMethod('logSetCheckoutOption',   'set_checkout_option');
+      _wrapMethod('logShare',               'share');
+      _wrapMethod('logSignUp',              'sign_up');
+      _wrapMethod('logSpendVirtualCurrency','spend_virtual_currency');
+      _wrapMethod('logTutorialBegin',       'tutorial_begin');
+      _wrapMethod('logTutorialComplete',    'tutorial_complete');
+      _wrapMethod('logUnlockAchievement',   'unlock_achievement');
+      _wrapMethod('logViewCart',            'view_cart');
+      _wrapMethod('logViewItem',            'view_item');
+      _wrapMethod('logViewItemList',        'view_item_list');
+      _wrapMethod('logViewPromotion',       'view_promotion');
+      _wrapMethod('logViewSearchResults',   'view_search_results');
 
       _console.log('[RNDebugSDK] GA4 Analytics prototype interceptor active');
       return true;
