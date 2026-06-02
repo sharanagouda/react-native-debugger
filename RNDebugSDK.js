@@ -557,59 +557,58 @@ try {
         try { return JSON.parse(JSON.stringify(p)); } catch { return {}; }
       }
 
-      // Helper to wrap a method on the prototype
-      function _wrapMethod(methodName, eventName) {
-        if (!proto[methodName]) return;
-        const orig = proto[methodName];
-        proto[methodName] = function(params) {
-          try { mainCh.send({ type: 'ga4', name: eventName, params: _safeParams(params), tag: 'GA4' }); } catch {}
-          return orig.call(this, params);
-        };
+      // Convert method name to event name: logAddToCart → add_to_cart
+      function _methodToEvent(name) {
+        // Remove 'log' prefix, then convert camelCase to snake_case
+        return name.replace(/^log/, '')
+          .replace(/([A-Z])/g, '_$1')
+          .toLowerCase()
+          .replace(/^_/, '');
       }
 
-      // Patch logEvent (custom events)
-      const _origLogEvent = proto.logEvent;
-      proto.logEvent = function(eventName, params) {
-        try { mainCh.send({ type: 'ga4', name: eventName, params: _safeParams(params), tag: 'GA4' }); } catch {}
-        return _origLogEvent.call(this, eventName, params);
-      };
+      // Dynamically wrap ALL methods that start with 'log' on the prototype
+      // This catches logEvent, logPurchase, logAddToCart, logScreenView, etc.
+      // Also catches any future methods Firebase adds.
+      Object.getOwnPropertyNames(proto).forEach(methodName => {
+        if (!methodName.startsWith('log') || typeof proto[methodName] !== 'function') return;
 
-      // Patch ALL predefined Firebase Analytics methods
-      _wrapMethod('logAddPaymentInfo',      'add_payment_info');
-      _wrapMethod('logAddShippingInfo',     'add_shipping_info');
-      _wrapMethod('logAddToCart',           'add_to_cart');
-      _wrapMethod('logAddToWishlist',       'add_to_wishlist');
-      _wrapMethod('logAppOpen',             'app_open');
-      _wrapMethod('logBeginCheckout',       'begin_checkout');
-      _wrapMethod('logCampaignDetails',     'campaign_details');
-      _wrapMethod('logEarnVirtualCurrency', 'earn_virtual_currency');
-      _wrapMethod('logGenerateLead',        'generate_lead');
-      _wrapMethod('logJoinGroup',           'join_group');
-      _wrapMethod('logLevelEnd',            'level_end');
-      _wrapMethod('logLevelStart',          'level_start');
-      _wrapMethod('logLevelUp',             'level_up');
-      _wrapMethod('logLogin',               'login');
-      _wrapMethod('logPostScore',           'post_score');
-      _wrapMethod('logPurchase',            'purchase');
-      _wrapMethod('logRefund',              'refund');
-      _wrapMethod('logRemoveFromCart',       'remove_from_cart');
-      _wrapMethod('logScreenView',          'screen_view');
-      _wrapMethod('logSearch',              'search');
-      _wrapMethod('logSelectContent',       'select_content');
-      _wrapMethod('logSelectItem',          'select_item');
-      _wrapMethod('logSelectPromotion',     'select_promotion');
-      _wrapMethod('logSetCheckoutOption',   'set_checkout_option');
-      _wrapMethod('logShare',               'share');
-      _wrapMethod('logSignUp',              'sign_up');
-      _wrapMethod('logSpendVirtualCurrency','spend_virtual_currency');
-      _wrapMethod('logTutorialBegin',       'tutorial_begin');
-      _wrapMethod('logTutorialComplete',    'tutorial_complete');
-      _wrapMethod('logUnlockAchievement',   'unlock_achievement');
-      _wrapMethod('logViewCart',            'view_cart');
-      _wrapMethod('logViewItem',            'view_item');
-      _wrapMethod('logViewItemList',        'view_item_list');
-      _wrapMethod('logViewPromotion',       'view_promotion');
-      _wrapMethod('logViewSearchResults',   'view_search_results');
+        const orig = proto[methodName];
+
+        if (methodName === 'logEvent') {
+          // logEvent has signature: (eventName, params, options?)
+          proto.logEvent = function(eventName, params, options) {
+            try { mainCh.send({ type: 'ga4', name: eventName, params: _safeParams(params), tag: 'GA4' }); } catch {}
+            return orig.call(this, eventName, params, options);
+          };
+        } else {
+          // All other log methods: logPurchase(params), logScreenView(params), etc.
+          const eventName = _methodToEvent(methodName);
+          proto[methodName] = function() {
+            try {
+              // First argument is always the params object (or undefined for logAppOpen, logTutorialBegin, etc.)
+              const params = arguments[0];
+              mainCh.send({ type: 'ga4', name: eventName, params: _safeParams(params), tag: 'GA4' });
+            } catch {}
+            return orig.apply(this, arguments);
+          };
+        }
+      });
+
+      // Also wrap set* methods to track user properties/consent
+      ['setUserId', 'setUserProperty', 'setUserProperties', 'setConsent', 'setDefaultEventParameters', 'setAnalyticsCollectionEnabled'].forEach(methodName => {
+        if (!proto[methodName] || typeof proto[methodName] !== 'function') return;
+        const orig = proto[methodName];
+        proto[methodName] = function() {
+          try {
+            const params = {};
+            // Capture the arguments as key-value
+            if (arguments.length === 1) params.value = _safeParams(arguments[0]);
+            else if (arguments.length >= 2) { params.name = arguments[0]; params.value = arguments[1]; }
+            mainCh.send({ type: 'ga4', name: methodName, params, tag: 'GA4' });
+          } catch {}
+          return orig.apply(this, arguments);
+        };
+      });
 
       _console.log('[RNDebugSDK] GA4 Analytics prototype interceptor active');
       return true;
