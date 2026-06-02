@@ -26,7 +26,7 @@ const state = {
     states: [],
     selected: -1,
     searchFilter: '',
-    sortDir: 'desc',
+    sortDir: 'asc',
   },
 
   storage: {
@@ -1732,7 +1732,7 @@ function initReduxPanel() {
       <input id="reduxSearch" class="net-search-input" style="margin-left:12px" placeholder="Filter actions..." />
       <div class="ml-auto" style="display:flex;align-items:center;gap:8px">
         <button class="panel-clear-btn" id="reduxClear" title="Clear redux">Clear</button>
-        <button class="panel-clear-btn" id="reduxSort" title="Toggle sort order">Time ▼</button>
+        <button class="panel-clear-btn" id="reduxSort" title="Toggle sort order">Time ▲</button>
         <div class="time-travel-bar" style="border:none;padding:0;margin:0">
           <button class="tt-btn" onclick="reduxJumpTo(state.redux.selected-1)">◀</button>
           <span class="tt-label" id="ttLabel">—/—</span>
@@ -1920,8 +1920,13 @@ function renderRedux() {
   });
 
   content.appendChild(frag);
-  const selEl = content.querySelector('.rdx-entry.selected');
-  if (selEl) selEl.scrollIntoView({ block: 'nearest' });
+  // Auto-scroll: if asc (latest at bottom), scroll to bottom; otherwise scroll selected into view
+  if (state.redux.sortDir === 'asc') {
+    content.scrollTop = content.scrollHeight;
+  } else {
+    const selEl = content.querySelector('.rdx-entry.selected');
+    if (selEl) selEl.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
