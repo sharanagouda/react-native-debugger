@@ -1,7 +1,7 @@
-# RN Debugger
+# ReactoRadar
 
 <p align="center">
-  <b>A standalone macOS app for debugging React Native apps</b>
+  <b>A standalone macOS debugger for React Native apps</b>
   <br/>
   <i>Supports React Native 0.74+ with Hermes, New Architecture, and latest versions</i>
 </p>
@@ -17,7 +17,7 @@
 
 ---
 
-> The original [React Native Debugger](https://github.com/jhen0409/react-native-debugger) only supports the old Remote Debugger and doesn't work with Hermes / JSI / New Architecture. **This app is the modern replacement** — built from scratch to work with the latest React Native versions.
+> The original [React Native Debugger](https://github.com/jhen0409/react-native-debugger) only supports the old Remote Debugger and doesn't work with Hermes / JSI / New Architecture. **ReactoRadar is the modern replacement** — built from scratch to work with the latest React Native versions.
 
 ## Screenshots
 
@@ -26,52 +26,49 @@
   <img src="https://raw.githubusercontent.com/sharanagouda/react-native-debugger/main/screenshots/consoleLogs.png" alt="Console Panel" width="800" />
 </p>
 
-*Collapsible object trees, level filters (Log/Info/Warn/Error), search, right-click to copy*
+*Collapsible object trees, multi-select level filters (Log/Info/Warn/Error/Debug), search, right-click to copy*
 
 ### Network — Chrome DevTools-style Inspector
 <p align="center">
   <img src="https://raw.githubusercontent.com/sharanagouda/react-native-debugger/main/screenshots/networkLogs.png" alt="Network Panel" width="800" />
 </p>
 
-*Resizable/sortable columns, request/response detail, Copy as cURL, throttling*
+*Resizable/sortable columns, request/response detail with collapsible trees, Copy as cURL, throttling*
 
-## What's included
+## Features
 
-- **Console** — Interactive log viewer with collapsible object trees (Chrome DevTools-like), level filters, caller file:line display
-- **Network Inspector** — Chrome DevTools-style network panel with resizable/sortable columns, search, type filters, throttling (Fast 3G / Slow 3G / Offline), Copy as cURL
-- **Performance** — Live FPS meter, JS Thread timing, UI Thread timing with real-time sparkline graphs
-- **Memory** — JS Heap Used/Total, Native Memory gauges from Hermes runtime
-- **Redux DevTools** — Action list with time travel (Prev/Next), State/Diff/Action tabs with previous/current/next action context
-- **AsyncStorage Inspector** — Live key/value browser with search
-- **React DevTools** — Component tree and props inspector via `react-devtools-core` relay
+| Tab | What it does |
+|---|---|
+| **Console** | Log viewer with collapsible object trees, multi-select level dropdown (persists across restarts), search filter |
+| **Network** | Chrome DevTools-style inspector — resizable/sortable columns (Name, Status, Type, Initiator, Size, Time, Waterfall), search, type filters (Fetch/XHR, JS, CSS, Img, Media, Font, Doc, WS), throttling (Fast 3G / Slow 3G / Offline), Copy as cURL, request/response as collapsible trees |
+| **Redux** | Scrollable action list with time travel, prev/current/next actions, payload trees, store diff showing changed keys with old → new values |
+| **GA4 Events** | Firebase Analytics inspector — intercepts ALL `log*` and `set*` methods on `@react-native-firebase/analytics`, event list with time + name, detail pane with all parameters as key-value trees, summary chips (click to filter), sort by time |
+| **App** | AsyncStorage live key/value browser with search |
+| **Memory** | JS Heap Used/Total, Native Memory from Hermes runtime |
+| **Performance** | Live FPS meter, JS Thread timing, UI Thread timing with sparkline graphs |
+| **React** | Component tree and props inspector via `react-devtools-core` relay |
+| **Settings** | 9 color themes (Dark, Light, Monokai, Dracula, Solarized Dark/Light, Nord, GitHub Dark, One Dark), font size controls, custom app name, how-to-use guide, auto-update notification |
 
 ## Installation
 
 ### Option A: Using npx (recommended)
 
-No install needed — run directly from your React Native project:
-
 ```bash
-npx reactoradar setup     # Install SDK into your RN project
-npx reactoradar            # Launch the debugger app
+cd your-react-native-project
+npx reactoradar setup     # Install SDK (one time)
+npx reactoradar            # Launch the debugger
 ```
 
 ### Option B: Download .dmg
 
-1. Download the `.dmg` from the [Releases](https://github.com/sharanagouda/react-native-debugger/releases) page
-2. Drag **RN Debugger** to your Applications folder
-3. **Important:** You still need to install the SDK into your RN project:
+1. Download from [Releases](https://github.com/sharanagouda/react-native-debugger/releases)
+2. Drag **ReactoRadar** to Applications
+3. Install the SDK: `npx reactoradar setup` from your RN project
+4. Open ReactoRadar from Applications
 
-```bash
-cd your-react-native-project
-npx reactoradar setup
-```
+> **macOS Gatekeeper**: First launch → right-click → Open → Open. Or: `xattr -cr "/Applications/ReactoRadar.app"`
 
-4. Launch the app from Applications and run your RN app
-
-> **macOS Gatekeeper warning:** Since the app isn't notarized with Apple, you'll see "Apple could not verify" on first launch. To fix: **right-click the app → Open → Open**. Or run: `xattr -cr "/Applications/RN Debugger.app"`
-
-### Option C: Using npm (global)
+### Option C: Global install
 
 ```bash
 npm install -g reactoradar
@@ -83,174 +80,86 @@ npm install -g reactoradar
 git clone https://github.com/sharanagouda/react-native-debugger.git
 cd react-native-debugger
 npm install
-npm start          # run in dev mode
+npm start          # dev mode
 npm run build      # build .dmg
 ```
 
-## React Native Compatibility
-
-| RN Debugger | React Native | Engine | Architecture |
-|---|---|---|---|
-| v1.0+ | 0.74 — 0.81+ | Hermes | Old & New Architecture |
-
-This app does **not** use the legacy Remote Debugger. It connects via WebSocket bridges and Chrome DevTools Protocol (CDP), which is the standard debugging interface for Hermes.
-
 ## Quick Start
 
-### Step 1: Install the SDK (one time, from your RN project)
-
 ```bash
+# Step 1: Install SDK (one time)
 cd your-react-native-project
 npx reactoradar setup
-```
 
-This automatically:
-- Copies `RNDebugSDK.js` into your project (`src/debug/`)
-- Detects your platform (iOS Simulator / Android Emulator / device) and sets the correct HOST
-- Patches `index.js` to load the SDK in `__DEV__` mode
-- Detects Redux (Toolkit or legacy) and wires the debug middleware
-- Runs `adb reverse` for Android (if emulator/device detected)
-- Adds the SDK to `.gitignore`
-
-### Step 2: Launch the debugger
-
-```bash
-# Using npx:
+# Step 2: Launch debugger
 npx reactoradar
+# or open ReactoRadar.app from Applications
 
-# Or if you installed the .dmg:
-open "/Applications/RN Debugger.app"
+# Step 3: Run your app
+npx react-native start --reset-cache
 ```
 
-### Step 3: Run your React Native app
+Console, Network, Redux, GA4, AsyncStorage data flows automatically. No config needed.
 
-```bash
-npx react-native run-ios    # or run-android
-```
-
-Console logs, network requests, Redux actions, and AsyncStorage data flow into the debugger automatically.
-
-### 4. Uninstall
+### Uninstall
 
 ```bash
 npx reactoradar remove
 ```
 
-Clean removal — removes SDK file, patches from `index.js`, Redux wiring, and `.gitignore` entry.
+## React Native Compatibility
 
-## Add to your project scripts
+| ReactoRadar | React Native | Engine | Architecture |
+|---|---|---|---|
+| v1.3+ | 0.74 — 0.81+ | Hermes | Old & New Architecture |
 
-```json
-{
-  "scripts": {
-    "debug:setup": "npx reactoradar setup",
-    "debug:start": "npx rn-debugger",
-    "debug:remove": "npx reactoradar remove"
-  }
-}
-```
-
-Then every developer on your team runs:
-
-```bash
-npm run debug:setup    # one time
-npm run debug:start    # every time
-```
-
-## Documentation
-
-### Console
-
-- Intercepts `console.log`, `console.warn`, `console.error`, etc.
-- Objects render as collapsible trees with syntax highlighting
-- Caller file:line shown at the end of each log row
-- Level filters: All / Log / Info / Warn / Error
-- Click to expand, right-click to copy message/JSON/caller
-- `Cmd+K` clears the active tab
-
-### Network Inspector
+## Network Inspector
 
 | Feature | Details |
 |---|---|
-| **Columns** | Name, Status, Type, Initiator, Size, Time, Waterfall — all resizable and sortable |
-| **Search** | Filter by API URL in real time |
+| **Columns** | Name, Status, Type, Initiator, Size, Time, Waterfall — resizable and sortable |
+| **Search** | Filter by URL in real time |
 | **Type filters** | All, Fetch/XHR, JS, CSS, Img, Media, Font, Doc, WS |
 | **Throttling** | No throttling, Fast 3G (500ms), Slow 3G (2s), Offline |
-| **Detail view** | Click a row → Headers / Request / Preview / Response tabs overlay on the right |
-| **Copy as cURL** | Right-click any request → Copy as cURL / Copy URL / Copy Response |
-| **Request body** | Rendered as collapsible object tree (not raw JSON) |
-| **Preview** | Response as interactive object tree, right-click to copy |
-| **Capture toggle** | ON/OFF switch to pause/resume network capture |
+| **Detail view** | Click row → Headers / Request / Preview / Response side panel |
+| **Copy as cURL** | Right-click → Copy as cURL / Copy URL / Copy Response |
+| **Request body** | Collapsible object tree (not raw JSON) |
+| **Capture toggle** | ON/OFF switch to pause network capture |
 
-Supports `fetch`, `XMLHttpRequest`, and `axios` (including `axios.create()` instances).
+## GA4 Event Inspector
 
-### Redux DevTools
-
-- Captures every dispatched action and the resulting state snapshot
-- **Time travel**: Step forward/backward through state history
-- **State tab**: Full state tree with syntax highlighting
-- **Diff tab**: Line-by-line diff against previous state
-- **Action tab**: Previous / Current / Next actions with payloads
-
-Wire Redux with one line:
-
-```js
-// Redux Toolkit
-middleware: (getDefault) =>
-  __DEV__ ? getDefault().concat(require('./src/debug/RNDebugSDK').reduxMiddleware) : getDefault(),
-
-// Legacy Redux
-if (__DEV__) middleware.push(require('./src/debug/RNDebugSDK').reduxMiddleware);
-```
-
-### AsyncStorage Inspector
-
-- Live key/value browser
-- Search keys
-- Values rendered as formatted JSON
-- Auto-updates when your app reads/writes AsyncStorage
-
-### Performance
-
-- **FPS** — Frames per second via `requestAnimationFrame` counter
-- **JS Thread** — JavaScript thread frame timing
-- **UI Thread** — Native UI thread timing
-- Real-time sparkline graphs
-- Data sent every 2 seconds from the SDK
-
-### Memory
-
-- **JS Heap Used** — Current JavaScript heap usage
-- **JS Heap Total** — Total allocated heap
-- **Native Memory** — Native heap from Hermes runtime
-- Powered by `HermesInternal.getRuntimeProperties()`
-
-### Network Throttling
-
-Simulates slow network conditions on the device:
-
-| Profile | Behavior |
+| Feature | Details |
 |---|---|
-| No throttling | Normal speed |
-| Fast 3G | 500ms artificial delay on every request |
-| Slow 3G | 2000ms delay |
-| Offline | All requests immediately rejected |
+| **Auto-intercept** | Patches ALL `log*` and `set*` methods on Firebase Analytics prototype — no hardcoded list, catches current + future methods |
+| **Event list** | Time + event name, newest first, sortable |
+| **Detail pane** | All parameters as key-value list with collapsible trees for objects/arrays |
+| **Summary chips** | Click any chip to filter by that event type, click again to clear |
+| **Resizable** | Drag the divider between list and detail |
+| **Supported methods** | `logEvent`, `logPurchase`, `logAddToCart`, `logViewItem`, `logScreenView`, `logSelectPromotion`, `logViewPromotion`, `setUserId`, `setUserProperty`, `setConsent`, and 30+ more |
 
-### Dark / Light Mode
+## Redux DevTools
 
-Toggle via Settings tab or `Cmd+Shift+T`. Persists across restarts.
+- Scrollable action list with search filter
+- Click an action → shows Previous / Current / Next with payloads as collapsible trees
+- Store diff for current action: shows each changed key with **- old value** and **+ new value**
+- Deep equality comparison (no false positives from reference changes)
+- Time travel with ◀ ▶ navigation
+
+## Themes
+
+9 built-in themes: **Dark** (default), **Light**, **Monokai**, **Dracula**, **Solarized Dark**, **Solarized Light**, **Nord**, **GitHub Dark**, **One Dark**
+
+All 16 CSS variables change per theme — every element in the app updates including text, backgrounds, borders, syntax highlighting, badges, and graphs.
 
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
 |---|---|
-| `Cmd+K` | Clear all panels |
-| `Cmd+D` | Open JS Debugger (CDP DevTools with breakpoints) |
+| `Cmd+D` | Open JS Debugger (CDP DevTools) |
 | `Cmd+R` | Open React DevTools |
-| `Cmd+Shift+T` | Toggle Dark / Light mode |
-| `Cmd+C` | Copy selected text |
-| `Cmd+V` | Paste into filter/search |
-| `Cmd+A` | Select all |
+| `Cmd+K` | Clear all panels |
+| `Cmd+Shift+T` | Cycle through themes |
+| `Cmd+C/V/A` | Copy / Paste / Select All |
 
 ## Ports
 
@@ -258,76 +167,58 @@ Toggle via Settings tab or `Cmd+Shift+T`. Persists across restarts.
 |---|---|
 | 9090 | Redux bridge |
 | 9091 | AsyncStorage bridge |
-| 9092 | Console + Network + Performance bridge |
+| 9092 | Console + Network + GA4 + Performance bridge |
 | 8097 | React DevTools relay |
 | 8081 | Metro bundler (CDP) |
 
-Change ports in both `main.js` and `RNDebugSDK.js` if conflicts arise.
+## Architecture
 
-## Android Setup
-
-For Android emulator, the setup command runs `adb reverse` automatically. For physical devices, ensure your Mac and device are on the same network and set the HOST in `src/debug/RNDebugSDK.js` to your Mac's LAN IP.
-
-```bash
-# Manual adb reverse (if needed)
-adb reverse tcp:9090 tcp:9090
-adb reverse tcp:9091 tcp:9091
-adb reverse tcp:9092 tcp:9092
-adb reverse tcp:8097 tcp:8097
+```
+┌─────────────────────────────────────────────────────┐
+│               ReactoRadar (Electron)                │
+│                                                     │
+│  Console │ Network │ Redux │ GA4 │ App              │
+│  Memory │ Perf │ React │ Settings                   │
+│                                                     │
+│  main.js                                            │
+│   ├─ WS :9092 ← console + network + ga4 + perf     │
+│   ├─ WS :9090 ← redux actions + state              │
+│   ├─ WS :9091 ← asyncstorage                       │
+│   ├─ WS :8097 ← react-devtools relay               │
+│   └─ HTTP :8081 → Metro CDP (on-demand)             │
+└──────────────────────┬──────────────────────────────┘
+                       │ WebSocket
+┌──────────────────────┴──────────────────────────────┐
+│            Your React Native App                    │
+│                                                     │
+│  RNDebugSDK.js (__DEV__ only)                       │
+│   ├─ console.* interceptor                          │
+│   ├─ XHR constructor wrapper (axios + fetch)        │
+│   ├─ Firebase Analytics prototype interceptor       │
+│   ├─ FPS + memory metrics                           │
+│   ├─ Redux middleware                               │
+│   └─ AsyncStorage watcher                           │
+└─────────────────────────────────────────────────────┘
 ```
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---|---|
-| App won't launch from VS Code terminal | Run: `unset ELECTRON_RUN_AS_NODE && npx rn-debugger` |
-| Device status shows "Waiting..." | Check HOST in `src/debug/RNDebugSDK.js`. iOS sim: `127.0.0.1`, Android emu: `10.0.2.2` |
-| Network tab empty | Run Metro with `--reset-cache`. Ensure Reactotron has `networking: false` |
-| `XHRInterceptor.js does not exist` | Set `networking: false` in ReactotronConfig.js |
-| Metro crashes with WebSocket error | Update to latest version — CDP polling was replaced with on-demand fetching |
-| Console shows `apply (native)` as caller | Update SDK with `npx reactoradar setup` |
+| App won't launch from VS Code terminal | `unset ELECTRON_RUN_AS_NODE && npx reactoradar` |
+| "Waiting for device" | Restart Metro: `npx react-native start --reset-cache` |
+| Network tab empty | Run Metro with `--reset-cache` |
+| `XHRInterceptor.js` warning | Set `networking: false` in ReactotronConfig.js |
+| GA4 events not showing | Restart Metro with `--reset-cache` after setup |
+| Port conflict | Change ports in `main.js` and `RNDebugSDK.js` |
 
+## Privacy
 
-## How it works
-
-```
-┌─────────────────────────────────────────────────────┐
-│               macOS Electron App                    │
-│                                                     │
-│  Console │ Network │ Perf │ Memory                   │
-│  Redux │ App (AsyncStorage) │ React │ Settings      │
-│                                                     │
-│  main.js                                            │
-│   ├─ WS Server :9092  ← console + network + perf   │
-│   ├─ WS Server :9090  ← redux actions + state      │
-│   ├─ WS Server :9091  ← asyncstorage mutations     │
-│   ├─ WS Relay  :8097  ← react-devtools bridge      │
-│   └─ HTTP      :8081  → Metro CDP (on-demand)       │
-└──────────────────────┬──────────────────────────────┘
-                       │ WebSocket
-┌──────────────────────┴──────────────────────────────┐
-│             Your React Native App                   │
-│                                                     │
-│  RNDebugSDK.js (loaded in __DEV__ only)             │
-│   ├─ console.* interceptor                          │
-│   ├─ XHR constructor wrapper (catches axios + fetch)│
-│   ├─ FPS + memory metrics                           │
-│   ├─ Network throttle support                       │
-│   ├─ Redux middleware                               │
-│   └─ AsyncStorage watcher                           │
-└─────────────────────────────────────────────────────┘
-```
-
-## Credits
-
-- [Electron](https://www.electronjs.org/) — Desktop app framework
-- [React DevTools](https://github.com/facebook/react/tree/main/packages/react-devtools) — React component inspector
-- [Redux DevTools](https://github.com/reduxjs/redux-devtools) — Inspiration for Redux time travel
-- [React Native Debugger](https://github.com/jhen0409/react-native-debugger) — The original that inspired this project
+ReactoRadar runs entirely on your local machine. No data collection, no analytics, no telemetry. See [PRIVACY.md](./PRIVACY.md).
 
 ## Contributing
 
-Contributions are welcome! Whether it's bug fixes, new features, documentation improvements, or UI enhancements — all PRs are appreciated.
+Contributions welcome! Fork → branch → PR.
 
 ```bash
 git clone https://github.com/sharanagouda/react-native-debugger.git
@@ -336,30 +227,19 @@ npm install
 npm start
 ```
 
-### How to contribute
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
 ### Ideas for contribution
-
-- Windows/Linux support
+- Windows / Linux support
 - Source file browser with breakpoints
-- React Native New Architecture profiling
-- Flipper plugin compatibility layer
+- Flipper plugin compatibility
 - Custom themes
-- Keyboard shortcut customization
+- React Native New Architecture profiling
 
-See [STATUS.md](./STATUS.md) for detailed technical documentation and architecture overview.
+## Credits
 
-## Privacy
-
-RN Debugger runs entirely on your local machine. It does not collect, transmit, or store any personal data. No analytics, no telemetry, no tracking. All debugging data stays on `localhost`.
-
-See [PRIVACY.md](./PRIVACY.md) for the full privacy policy.
+- [Electron](https://www.electronjs.org/)
+- [React DevTools](https://github.com/facebook/react/tree/main/packages/react-devtools)
+- [Redux DevTools](https://github.com/reduxjs/redux-devtools)
+- [React Native Debugger](https://github.com/jhen0409/react-native-debugger) — the original inspiration
 
 ## License
 
