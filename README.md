@@ -348,6 +348,12 @@ npm start
 
 See [STATUS.md](./STATUS.md) for detailed technical documentation and architecture overview.
 
+## Privacy
+
+RN Debugger runs entirely on your local machine. It does not collect, transmit, or store any personal data. No analytics, no telemetry, no tracking. All debugging data stays on `localhost`.
+
+See [PRIVACY.md](./PRIVACY.md) for the full privacy policy.
+
 ## License
 
 [MIT](./LICENSE)
