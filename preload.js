@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const allowed = [
       'ports', 'cdp-targets', 'redux-event', 'storage-event', 'network-event',
       'console-event', 'perf-event', 'redux-connected', 'storage-connected', 'network-connected',
-      'react-dt-status', 'trigger-open-cdp', 'clear-all-ui', 'theme-changed', 'update-available',
+      'react-dt-status', 'trigger-open-cdp', 'clear-all-ui', 'theme-changed', 'update-available', 'app-version',
     ];
     if (allowed.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);

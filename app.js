@@ -225,17 +225,30 @@ if (window.electronAPI) {
 
   window.electronAPI.on('clear-all-ui', clearAll);
 
+  window.electronAPI.on('app-version', (version) => {
+    state._appVersion = version;
+    const el = $('aboutVersion');
+    if (el) el.textContent = 'v' + version;
+  });
+
   window.electronAPI.on('update-available', ({ current, latest }) => {
-    const banner = document.createElement('div');
-    banner.className = 'update-banner';
-    banner.innerHTML = `New version <b>v${latest}</b> available (current: v${current}).
-      <a class="update-link" id="updateLink">Download update</a>
-      <span class="update-dismiss" id="updateDismiss">&times;</span>`;
-    document.getElementById('app').prepend(banner);
-    $('updateLink')?.addEventListener('click', () => {
-      window.electronAPI?.openExternal('https://github.com/sharanagouda/react-native-debugger/releases');
-    });
-    $('updateDismiss')?.addEventListener('click', () => banner.remove());
+    // Show in settings only, not as a banner
+    state._updateAvailable = { current, latest };
+    const el = $('aboutVersion');
+    if (el) el.innerHTML = `v${current} <span style="color:var(--green);font-size:10px;margin-left:6px">v${latest} available</span>`;
+    // Add update button in settings if not already there
+    if (!$('updateBtn')) {
+      const aboutEl = document.querySelector('.settings-about');
+      if (aboutEl) {
+        const btn = document.createElement('div');
+        btn.style.cssText = 'margin-top:10px';
+        btn.innerHTML = '<button id="updateBtn" class="tb-btn primary" style="font-size:11px">Download v' + latest + '</button>';
+        aboutEl.appendChild(btn);
+        $('updateBtn')?.addEventListener('click', () => {
+          window.electronAPI?.openExternal('https://github.com/sharanagouda/react-native-debugger/releases');
+        });
+      }
+    }
   });
 
   window.electronAPI.on('trigger-open-cdp', () => {
@@ -1880,7 +1893,7 @@ function initSettingsPanel() {
           <div class="settings-section-title">About</div>
           <div class="settings-about">
             <div class="about-name" id="aboutAppName">${getStoredAppName()}</div>
-            <div class="about-version">v1.2.0</div>
+            <div class="about-version" id="aboutVersion">v${state._appVersion || '...'}</div>
             <div class="about-desc">A standalone macOS debugger for React Native apps.<br/>Supports Hermes, New Architecture, and React Native 0.74+.</div>
             <div class="about-links" style="display:flex;gap:16px;justify-content:center">
               <span class="about-link" id="linkGithub">GitHub</span>

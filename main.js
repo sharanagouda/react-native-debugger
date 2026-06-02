@@ -29,10 +29,14 @@ app.whenReady().then(async () => {
   // Theme will be set by renderer via IPC once it reads localStorage
   nativeTheme.themeSource = 'dark';
 
-  // Set dock icon on macOS
+  // Set dock icon on macOS — use icns for proper scaling
   if (process.platform === 'darwin') {
     try {
-      const iconPath = path.join(__dirname, 'ReactoRadar.png');
+      const icnsPath = path.join(__dirname, 'ReactoRadar.icns');
+      const pngPath = path.join(__dirname, 'ReactoRadar.png');
+      const fs = require('fs');
+      // Prefer .icns (handles dock scaling correctly), fallback to .png
+      const iconPath = fs.existsSync(icnsPath) ? icnsPath : pngPath;
       const icon = nativeImage.createFromPath(iconPath);
       if (!icon.isEmpty()) {
         app.dock.setIcon(icon);
@@ -43,6 +47,12 @@ app.whenReady().then(async () => {
   }
 
   await createMainWindow();
+
+  // Send version to renderer
+  const appVersion = require('./package.json').version;
+  mainWindow?.webContents.on('did-finish-load', () => {
+    mainWindow?.webContents.send('app-version', appVersion);
+  });
 
   // Check for updates (non-blocking)
   checkForUpdates();
@@ -86,7 +96,7 @@ async function createMainWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
     },
-    icon: nativeImage.createFromPath(path.join(__dirname, 'ReactoRadar.png')),
+    icon: nativeImage.createFromPath(path.join(__dirname, 'ReactoRadar.icns')),
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
