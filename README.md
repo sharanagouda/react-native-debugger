@@ -12,16 +12,32 @@
   <img src="https://img.shields.io/badge/New%20Architecture-Supported-green" alt="New Arch" />
   <img src="https://img.shields.io/badge/Platform-macOS-lightgrey" alt="macOS" />
   <img src="https://img.shields.io/badge/License-MIT-yellow" alt="MIT" />
+  <img src="https://img.shields.io/npm/v/rn-debugger-app" alt="npm version" />
 </p>
 
 ---
 
 > The original [React Native Debugger](https://github.com/jhen0409/react-native-debugger) only supports the old Remote Debugger and doesn't work with Hermes / JSI / New Architecture. **This app is the modern replacement** — built from scratch to work with the latest React Native versions.
 
+## Screenshots
+
+### Console — Interactive Log Viewer
+<p align="center">
+  <img src="screenshots/consoleLogs.png" alt="Console Panel" width="800" />
+</p>
+
+*Collapsible object trees, level filters (Log/Info/Warn/Error), search, right-click to copy*
+
+### Network — Chrome DevTools-style Inspector
+<p align="center">
+  <img src="screenshots/networkLogs.png" alt="Network Panel" width="800" />
+</p>
+
+*Resizable/sortable columns, request/response detail, Copy as cURL, throttling*
+
 ## What's included
 
 - **Console** — Interactive log viewer with collapsible object trees (Chrome DevTools-like), level filters, caller file:line display
-- **Sources** — Browse all source files from Metro bundle with folder tree, syntax-highlighted code viewer, breakpoints via CDP
 - **Network Inspector** — Chrome DevTools-style network panel with resizable/sortable columns, search, type filters, throttling (Fast 3G / Slow 3G / Offline), Copy as cURL
 - **Performance** — Live FPS meter, JS Thread timing, UI Thread timing with real-time sparkline graphs
 - **Memory** — JS Heap Used/Total, Native Memory gauges from Hermes runtime
@@ -143,13 +159,6 @@ npm run debug:start    # every time
 - Click to expand, right-click to copy message/JSON/caller
 - `Cmd+K` clears the active tab
 
-### Sources
-
-- Folder tree of all source files from the Metro bundle
-- Click a file to view source with line numbers and syntax highlighting
-- Search to filter files
-- "Breakpoints" button opens the full CDP DevTools window for step debugging
-
 ### Network Inspector
 
 | Feature | Details |
@@ -268,7 +277,7 @@ adb reverse tcp:8097 tcp:8097
 | `XHRInterceptor.js does not exist` | Set `networking: false` in ReactotronConfig.js |
 | Metro crashes with WebSocket error | Update to latest version — CDP polling was replaced with on-demand fetching |
 | Console shows `apply (native)` as caller | Update SDK with `npx rn-debugger setup` |
-| Sources shows "Waiting for Metro" | Wait for Metro to finish bundling (`BUNDLE ./index.js` in terminal) |
+
 
 ## How it works
 
@@ -276,7 +285,7 @@ adb reverse tcp:8097 tcp:8097
 ┌─────────────────────────────────────────────────────┐
 │               macOS Electron App                    │
 │                                                     │
-│  Console │ Sources │ Network │ Perf │ Memory        │
+│  Console │ Network │ Perf │ Memory                   │
 │  Redux │ App (AsyncStorage) │ React │ Settings      │
 │                                                     │
 │  main.js                                            │
@@ -309,14 +318,33 @@ adb reverse tcp:8097 tcp:8097
 
 ## Contributing
 
+Contributions are welcome! Whether it's bug fixes, new features, documentation improvements, or UI enhancements — all PRs are appreciated.
+
 ```bash
 git clone https://github.com/sharanagouda/react-native-debugger.git
-cd rn-debugger-app
+cd react-native-debugger
 npm install
 npm start
 ```
 
-See [STATUS.md](./STATUS.md) for detailed technical documentation.
+### How to contribute
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Ideas for contribution
+
+- Windows/Linux support
+- Source file browser with breakpoints
+- React Native New Architecture profiling
+- Flipper plugin compatibility layer
+- Custom themes
+- Keyboard shortcut customization
+
+See [STATUS.md](./STATUS.md) for detailed technical documentation and architecture overview.
 
 ## License
 
