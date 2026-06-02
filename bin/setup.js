@@ -293,7 +293,7 @@ ${SDK_MARKER_END}
   if (entryFile) console.log(C.dim + '    ~ ' + entryFile + '                (entry patched)' + C.reset);
   console.log();
   console.log(C.bold + '  Next steps:' + C.reset);
-  console.log('    1. Start the debugger:  ' + C.cyan + 'cd ' + debuggerDir + ' && npm start' + C.reset);
+  console.log('    1. Start the debugger:  ' + C.cyan + 'npx rn-debugger-app' + C.reset + '  or  ' + C.dim + 'open RN Debugger.app' + C.reset);
   console.log('    2. Run your RN app:     ' + C.cyan + 'npx react-native run-ios' + C.reset + '  or  ' + C.cyan + 'run-android' + C.reset);
   console.log('    3. Console, Network, Storage auto-connect');
   console.log();
