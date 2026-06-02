@@ -3,6 +3,7 @@
 const { app, BrowserWindow, ipcMain, Menu, shell, nativeTheme, nativeImage } = require('electron');
 const path = require('path');
 const http = require('http');
+const https = require('https');
 const { WebSocketServer, WebSocket } = require('ws');
 
 // ─── Ports ────────────────────────────────────────────────────────────────────
@@ -99,7 +100,6 @@ async function createMainWindow() {
 // ─── Update Checker ──────────────────────────────────────────────────────────
 function checkForUpdates() {
   const currentVersion = require('./package.json').version;
-  https = require('https');
   https.get('https://registry.npmjs.org/rn-debugger-app/latest', (res) => {
     let data = '';
     res.on('data', d => data += d);
