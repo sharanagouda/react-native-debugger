@@ -1757,9 +1757,26 @@ function applyTheme(theme) {
 function applyFontSize(size) {
   document.documentElement.style.setProperty('--app-font-size', size + 'px');
   document.body.style.fontSize = size + 'px';
-  // Update all text areas that have explicit font sizes
-  document.querySelectorAll('.log-preview, .log-body, .log-text, .net-cell, .detail-content, .redux-state-body, .storage-value-body, .sources-code, .source-line-code, .ov-leaf, .ov-key, .ov-preview, .ov-str, .ov-num, .ov-bool, .action-type, .kv-val')
-    .forEach(el => el.style.fontSize = size + 'px');
+  // Inject/update a <style> tag so ALL current and future elements get the size
+  let styleEl = document.getElementById('dynamic-font-size');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'dynamic-font-size';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `
+    .log-preview, .log-body, .log-text, .log-caller-inline,
+    .net-cell, .net-cell-name, .net-type, .net-initiator, .net-size, .net-time, .net-status,
+    .detail-content, .kv-val, .kv-key,
+    .rdx-type, .rdx-entry-detail, .rdx-store-key-label,
+    .storage-value-body, .storage-key-row,
+    .sources-code, .source-line-code,
+    .ov-leaf, .ov-key, .ov-preview, .ov-str, .ov-num, .ov-bool, .ov-null, .ov-undef,
+    .perf-meter-label,
+    .settings-label, .settings-hint {
+      font-size: ${size}px !important;
+    }
+  `;
   const display = $('fontSizeDisplay');
   if (display) display.textContent = size + 'px';
 }
