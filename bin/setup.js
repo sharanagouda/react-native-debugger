@@ -292,9 +292,17 @@ ${SDK_MARKER_END}
   console.log(C.dim + '    + src/debug/RNDebugSDK.js   (SDK)' + C.reset);
   if (entryFile) console.log(C.dim + '    ~ ' + entryFile + '                (entry patched)' + C.reset);
   console.log();
+  // Check if .dmg app is installed
+  const dmgInstalled = require('fs').existsSync('/Applications/RN Debugger.app');
+
   console.log(C.bold + '  Next steps:' + C.reset);
-  console.log('    1. Start the debugger:  ' + C.cyan + 'npx rn-debugger-app' + C.reset + '  or  ' + C.dim + 'open RN Debugger.app' + C.reset);
-  console.log('    2. Run your RN app:     ' + C.cyan + 'npx react-native run-ios' + C.reset + '  or  ' + C.cyan + 'run-android' + C.reset);
+  if (dmgInstalled) {
+    console.log('    1. Start the debugger:  ' + C.cyan + 'open "/Applications/RN Debugger.app"' + C.reset);
+  } else {
+    console.log('    1. Start the debugger:  ' + C.cyan + 'npx rn-debugger-app' + C.reset);
+    console.log('       ' + C.dim + '(or download .dmg from https://github.com/sharanagouda/react-native-debugger/releases)' + C.reset);
+  }
+  console.log('    2. Run your RN app:     ' + C.cyan + 'npx react-native start --reset-cache' + C.reset);
   console.log('    3. Console, Network, Storage auto-connect');
   console.log();
   if (platform.hasAndroidDevice || platform.hasAndroidEmu) {
