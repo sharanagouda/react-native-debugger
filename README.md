@@ -47,42 +47,44 @@
 
 ## Installation
 
-### Using npx (recommended)
+### Option A: Using npx (recommended)
 
 No install needed — run directly from your React Native project:
 
 ```bash
-npx rn-debugger setup     # Install SDK into your RN project
-npx rn-debugger            # Launch the debugger app
+npx rn-debugger-app setup     # Install SDK into your RN project
+npx rn-debugger-app            # Launch the debugger app
 ```
 
-### Using npm (global)
+### Option B: Download .dmg
+
+1. Download the `.dmg` from the [Releases](https://github.com/sharanagouda/react-native-debugger/releases) page
+2. Drag **RN Debugger** to your Applications folder
+3. **Important:** You still need to install the SDK into your RN project:
+
+```bash
+cd your-react-native-project
+npx rn-debugger-app setup
+```
+
+4. Launch the app from Applications and run your RN app
+
+> **macOS Gatekeeper warning:** Since the app isn't notarized with Apple, you'll see "Apple could not verify" on first launch. To fix: **right-click the app → Open → Open**. Or run: `xattr -cr "/Applications/RN Debugger.app"`
+
+### Option C: Using npm (global)
 
 ```bash
 npm install -g rn-debugger-app
-rn-debugger setup
-rn-debugger
 ```
 
-### Using Homebrew (macOS)
-
-```bash
-brew install --cask rn-debugger
-```
-
-### Download prebuilt binary
-
-Download the `.dmg` from the [Releases](https://github.com/sharanagouda/react-native-debugger/releases) page.
-
-> **macOS Gatekeeper warning**: Since the app isn't notarized with Apple, you'll see "Apple could not verify" on first launch. To open it: **right-click the app → Open → Open**. Or run: `xattr -cr "/Applications/RN Debugger.app"`
-
-### Build from source
+### Option D: Build from source
 
 ```bash
 git clone https://github.com/sharanagouda/react-native-debugger.git
-cd rn-debugger-app
+cd react-native-debugger
 npm install
-npm start
+npm start          # run in dev mode
+npm run build      # build .dmg
 ```
 
 ## React Native Compatibility
@@ -95,10 +97,11 @@ This app does **not** use the legacy Remote Debugger. It connects via WebSocket 
 
 ## Quick Start
 
-### 1. Setup (one time, from your RN project directory)
+### Step 1: Install the SDK (one time, from your RN project)
 
 ```bash
-npx rn-debugger setup
+cd your-react-native-project
+npx rn-debugger-app setup
 ```
 
 This automatically:
@@ -109,13 +112,17 @@ This automatically:
 - Runs `adb reverse` for Android (if emulator/device detected)
 - Adds the SDK to `.gitignore`
 
-### 2. Launch the debugger
+### Step 2: Launch the debugger
 
 ```bash
-npx rn-debugger
+# Using npx:
+npx rn-debugger-app
+
+# Or if you installed the .dmg:
+open "/Applications/RN Debugger.app"
 ```
 
-### 3. Run your React Native app
+### Step 3: Run your React Native app
 
 ```bash
 npx react-native run-ios    # or run-android
@@ -126,7 +133,7 @@ Console logs, network requests, Redux actions, and AsyncStorage data flow into t
 ### 4. Uninstall
 
 ```bash
-npx rn-debugger remove
+npx rn-debugger-app remove
 ```
 
 Clean removal — removes SDK file, patches from `index.js`, Redux wiring, and `.gitignore` entry.
@@ -136,9 +143,9 @@ Clean removal — removes SDK file, patches from `index.js`, Redux wiring, and `
 ```json
 {
   "scripts": {
-    "debug:setup": "npx rn-debugger setup",
+    "debug:setup": "npx rn-debugger-app setup",
     "debug:start": "npx rn-debugger",
-    "debug:remove": "npx rn-debugger remove"
+    "debug:remove": "npx rn-debugger-app remove"
   }
 }
 ```
@@ -278,7 +285,7 @@ adb reverse tcp:8097 tcp:8097
 | Network tab empty | Run Metro with `--reset-cache`. Ensure Reactotron has `networking: false` |
 | `XHRInterceptor.js does not exist` | Set `networking: false` in ReactotronConfig.js |
 | Metro crashes with WebSocket error | Update to latest version — CDP polling was replaced with on-demand fetching |
-| Console shows `apply (native)` as caller | Update SDK with `npx rn-debugger setup` |
+| Console shows `apply (native)` as caller | Update SDK with `npx rn-debugger-app setup` |
 
 
 ## How it works
