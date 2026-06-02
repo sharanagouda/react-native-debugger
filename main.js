@@ -38,10 +38,10 @@ app.whenReady().then(async () => {
 
   await createMainWindow();
 
-  // Send version to renderer
+  // Send version to renderer (delay to ensure IPC listeners are registered)
   const appVersion = require('./package.json').version;
   mainWindow?.webContents.on('did-finish-load', () => {
-    mainWindow?.webContents.send('app-version', appVersion);
+    setTimeout(() => mainWindow?.webContents.send('app-version', appVersion), 500);
   });
 
   // Check for updates (non-blocking)

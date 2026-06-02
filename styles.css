@@ -490,6 +490,7 @@ body {
 .lvl-warn  { background: rgba(245,200,66,.12);  color: var(--yellow); }
 .lvl-error { background: rgba(255,94,114,.15);  color: var(--red); }
 .lvl-debug { background: rgba(155,127,255,.12); color: var(--accent2); }
+.lvl-redux { background: rgba(61,214,140,.12); color: var(--green); }
 
 .log-body-wrap {
   display: flex;

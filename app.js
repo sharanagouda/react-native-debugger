@@ -6,13 +6,13 @@ const state = {
   activePanel: 'console',
   ports: {},
 
-  console: { logs: [], levelFilters: { log: true, info: true, warn: true, error: true, debug: true }, searchFilter: '' },
+  console: { logs: [], levelFilters: { log: true, info: true, warn: true, error: true, debug: true }, searchFilter: '', showRedux: false },
 
   network: {
     requests: {},
     order: [],
     statusFilter: 'all',
-    typeFilter: 'all',
+    typeFilter: 'fetch',
     searchFilter: '',
     throttle: 'none',
     enabled: true,
@@ -26,6 +26,7 @@ const state = {
     states: [],
     selected: -1,
     searchFilter: '',
+    sortDir: 'desc',
   },
 
   storage: {
@@ -299,7 +300,7 @@ function getStoredLogLevels() {
     const saved = localStorage.getItem('rn-debug-log-levels');
     if (saved) return JSON.parse(saved);
   } catch {}
-  return { log: true, info: true, warn: true, error: true, debug: true };
+  return { log: true, info: true, warn: true, error: true, debug: true, redux: false };
 }
 function setStoredLogLevels(levels) {
   try { localStorage.setItem('rn-debug-log-levels', JSON.stringify(levels)); } catch {}
@@ -309,6 +310,7 @@ function initConsolePanel() {
   const panel = $('panel-console');
   const levels = getStoredLogLevels();
   state.console.levelFilters = levels;
+  state.console.showRedux = !!levels.redux;
 
   panel.innerHTML = `
     <div class="panel-toolbar">
@@ -325,6 +327,8 @@ function initConsolePanel() {
             <label class="console-level-option"><input type="checkbox" data-level="warn" ${levels.warn ? 'checked' : ''} /><span class="lvl-dot" style="background:var(--yellow)"></span>Warn</label>
             <label class="console-level-option"><input type="checkbox" data-level="error" ${levels.error ? 'checked' : ''} /><span class="lvl-dot" style="background:var(--red)"></span>Error</label>
             <label class="console-level-option"><input type="checkbox" data-level="debug" ${levels.debug ? 'checked' : ''} /><span class="lvl-dot" style="background:var(--accent2)"></span>Debug</label>
+            <div style="border-top:1px solid var(--border);margin:4px 0"></div>
+            <label class="console-level-option"><input type="checkbox" data-level="redux" ${levels.redux ? 'checked' : ''} /><span class="lvl-dot" style="background:var(--green)"></span>Redux Actions</label>
           </div>
         </div>
       </div>
@@ -362,6 +366,7 @@ function initConsolePanel() {
     const level = checkbox.dataset.level;
     if (level) {
       state.console.levelFilters[level] = checkbox.checked;
+      if (level === 'redux') state.console.showRedux = checkbox.checked;
       setStoredLogLevels(state.console.levelFilters);
       updateLevelBtnText();
       renderConsole();
@@ -380,16 +385,17 @@ function initConsolePanel() {
 
 function updateLevelBtnText() {
   const levels = state.console.levelFilters;
-  const allOn = Object.values(levels).every(v => v);
-  const allOff = Object.values(levels).every(v => !v);
+  const logLevels = { log: levels.log, info: levels.info, warn: levels.warn, error: levels.error, debug: levels.debug };
+  const allOn = Object.values(logLevels).every(v => v);
+  const allOff = Object.values(logLevels).every(v => !v);
   const btn = $('consoleLevelBtn');
   if (!btn) return;
-  if (allOn) btn.textContent = 'All Levels ▾';
-  else if (allOff) btn.textContent = 'None ▾';
-  else {
-    const active = Object.entries(levels).filter(([, v]) => v).map(([k]) => k.charAt(0).toUpperCase() + k.slice(1));
-    btn.textContent = active.join(', ') + ' ▾';
-  }
+  let text = '';
+  if (allOn) text = 'All Levels';
+  else if (allOff) text = 'None';
+  else text = Object.entries(logLevels).filter(([, v]) => v).map(([k]) => k.charAt(0).toUpperCase() + k.slice(1)).join(', ');
+  if (levels.redux) text += (text ? ' + ' : '') + 'Redux';
+  btn.textContent = text + ' ▾';
 }
 
 // Console is fed via IPC (network-event handled in IPC section above)
@@ -873,8 +879,8 @@ function initNetworkPanel() {
     <div class="net-filter-bar" id="netFilterBar">
       <input id="netSearchInput" class="net-search-input" placeholder="Filter URLs..." />
       <div class="net-type-filters" id="netTypeFilters">
-        <button class="net-type-btn active" data-type="all">All</button>
-        <button class="net-type-btn" data-type="fetch">Fetch/XHR</button>
+        <button class="net-type-btn" data-type="all">All</button>
+        <button class="net-type-btn active" data-type="fetch">Fetch/XHR</button>
         <button class="net-type-btn" data-type="js">JS</button>
         <button class="net-type-btn" data-type="css">CSS</button>
         <button class="net-type-btn" data-type="img">Img</button>
@@ -1726,6 +1732,7 @@ function initReduxPanel() {
       <input id="reduxSearch" class="net-search-input" style="margin-left:12px" placeholder="Filter actions..." />
       <div class="ml-auto" style="display:flex;align-items:center;gap:8px">
         <button class="panel-clear-btn" id="reduxClear" title="Clear redux">Clear</button>
+        <button class="panel-clear-btn" id="reduxSort" title="Toggle sort order">Time ▼</button>
         <div class="time-travel-bar" style="border:none;padding:0;margin:0">
           <button class="tt-btn" onclick="reduxJumpTo(state.redux.selected-1)">◀</button>
           <span class="tt-label" id="ttLabel">—/—</span>
@@ -1751,6 +1758,12 @@ function initReduxPanel() {
     state.redux.states = [];
     state.redux.selected = -1;
     $('rBadge').textContent = '0';
+    renderRedux();
+  });
+
+  $('reduxSort').addEventListener('click', () => {
+    state.redux.sortDir = state.redux.sortDir === 'desc' ? 'asc' : 'desc';
+    $('reduxSort').textContent = state.redux.sortDir === 'desc' ? 'Time \u25BC' : 'Time \u25B2';
     renderRedux();
   });
 }
@@ -1786,11 +1799,24 @@ function handleReduxEvent(event) {
     allKeys.forEach(k => { if (!_deepEqual(prevState[k], nextState[k])) changedKeys.push(k); });
   }
 
-  state.redux.actions.push({ type: action?.type || '?', payload: action, ts: event.ts, index: idx, changedKeys });
+  const actionEntry = { type: action?.type || '?', payload: action, ts: event.ts, index: idx, changedKeys };
+  state.redux.actions.push(actionEntry);
   state.redux.states.push(nextState);
   state.redux.selected = idx;
   $('rBadge').textContent = state.redux.actions.length;
   renderRedux();
+
+  // Also add to console logs if Redux is enabled in console dropdown
+  if (state.console.showRedux) {
+    const msg = `[Redux] ${actionEntry.type}` + (changedKeys.length ? ` (changed: ${changedKeys.join(', ')})` : '');
+    addConsoleLog({
+      level: 'redux',
+      message: msg,
+      args: [{ t: 'string', v: `[Redux] ${actionEntry.type}` }, { t: 'object', v: action }],
+      ts: event.ts,
+      _isRedux: true,
+    });
+  }
 }
 
 function renderRedux() {
@@ -1798,8 +1824,9 @@ function renderRedux() {
   const empty = $('reduxEmpty');
   if (!content) return;
 
-  const { actions, states, selected, searchFilter } = state.redux;
-  const visible = searchFilter ? actions.filter(a => a.type.toLowerCase().includes(searchFilter)) : actions;
+  const { actions, states, selected, searchFilter, sortDir } = state.redux;
+  let visible = searchFilter ? actions.filter(a => a.type.toLowerCase().includes(searchFilter)) : [...actions];
+  if (sortDir === 'desc') visible = [...visible].reverse();
 
   empty.style.display = visible.length ? 'none' : 'flex';
   content.querySelectorAll('.rdx-entry').forEach(e => e.remove());
