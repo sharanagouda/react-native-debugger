@@ -67,7 +67,7 @@ function renderJSON(val) {
   try {
     const str = typeof val === 'string' ? val : JSON.stringify(val, null, 2);
     return syntaxHighlight(esc(str));
-  } catch { return esc(String(val)); }
+  } catch { return esc(typeof val === 'object' ? JSON.stringify(val) : String(val)); }
 }
 
 function tryURL(url) { try { return new URL(url); } catch { return null; } }
@@ -239,7 +239,7 @@ if (window.electronAPI) {
   window.electronAPI.on('clear-all-ui', clearAll);
 
   // Cmd+F — focus the search input for the active panel
-  window.electronAPI.on('focus-search', () => {
+  function _handleFind() {
     const searchMap = {
       console: 'consoleSearch',
       network: 'netSearchInput',
@@ -256,6 +256,14 @@ if (window.electronAPI) {
     if (state.activePanel === 'console') {
       const bar = $('consoleFindBar');
       if (bar) { bar.style.display = 'flex'; $('consoleFindInput')?.focus(); }
+    }
+  }
+  window.electronAPI.on('focus-search', _handleFind);
+  // Direct keyboard fallback — Electron menu accelerators can miss in some contexts
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      e.preventDefault();
+      _handleFind();
     }
   });
 
@@ -688,6 +696,14 @@ function createTreeNode(key, val, startCollapsed) {
   return container;
 }
 
+function _safeStr(val) {
+  if (val === null) return 'null';
+  if (val === undefined) return 'undefined';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+  try { return JSON.stringify(val, null, 2); } catch { return String(val); }
+}
+
 function createPrimitiveSpan(val) {
   const s = document.createElement('span');
   if (val === null) { s.className = 'ov-null'; s.textContent = 'null'; }
@@ -695,7 +711,7 @@ function createPrimitiveSpan(val) {
   else if (typeof val === 'string') { s.className = 'ov-str'; s.textContent = `"${val}"`; }
   else if (typeof val === 'number') { s.className = 'ov-num'; s.textContent = String(val); }
   else if (typeof val === 'boolean') { s.className = 'ov-bool'; s.textContent = String(val); }
-  else { s.textContent = String(val); }
+  else { s.textContent = _safeStr(val); }
   return s;
 }
 
@@ -705,7 +721,7 @@ function renderConsoleArg(arg) {
     // Backward compat: raw string
     const s = document.createElement('span');
     s.className = 'ov-str';
-    s.textContent = String(arg);
+    s.textContent = _safeStr(arg);
     return s;
   }
   const { t, v } = arg;
@@ -723,7 +739,7 @@ function renderConsoleArg(arg) {
     return createTreeNode(null, v, false);
   }
   const s = document.createElement('span');
-  s.textContent = String(v);
+  s.textContent = _safeStr(v);
   return s;
 }
 
@@ -1972,6 +1988,98 @@ function _findLeafChanges(oldVal, newVal, basePath, maxDepth) {
   return changes;
 }
 
+// Create a tree node with changed paths highlighted in a different color
+function _createHighlightedTree(key, val, changedPaths, currentPath, isOld) {
+  const isArray = Array.isArray(val);
+  const isObj = val !== null && typeof val === 'object';
+  const myPath = key !== null ? (currentPath ? `${currentPath}.${key}` : String(key)) : currentPath;
+  const isChanged = changedPaths.has(myPath);
+
+  if (!isObj) {
+    // Leaf value
+    const row = document.createElement('div');
+    row.className = 'ov-leaf' + (isChanged ? ' rdx-highlight' : '');
+    if (isChanged) row.style.cssText = isOld
+      ? 'background:rgba(255,94,114,.12);border-radius:3px;padding:1px 4px;'
+      : 'background:rgba(61,214,140,.12);border-radius:3px;padding:1px 4px;';
+    if (key !== null) {
+      const k = document.createElement('span');
+      k.className = 'ov-key';
+      k.style.color = isChanged ? (isOld ? 'var(--red)' : 'var(--green)') : '';
+      k.textContent = `${key}: `;
+      row.appendChild(k);
+    }
+    const v = document.createElement('span');
+    v.className = 'ov-prim';
+    if (isChanged) v.style.fontWeight = '700';
+    if (val === null) { v.textContent = 'null'; v.style.color = isChanged ? (isOld ? 'var(--red)' : 'var(--green)') : 'var(--text-dim)'; }
+    else if (typeof val === 'string') { v.textContent = `"${val}"`; v.style.color = isChanged ? (isOld ? 'var(--red)' : 'var(--green)') : 'var(--green)'; }
+    else if (typeof val === 'number') { v.textContent = String(val); v.style.color = isChanged ? (isOld ? 'var(--red)' : 'var(--green)') : 'var(--accent2)'; }
+    else if (typeof val === 'boolean') { v.textContent = String(val); v.style.color = isChanged ? (isOld ? 'var(--red)' : 'var(--green)') : 'var(--accent2)'; }
+    else { v.textContent = _safeStr(val); }
+    row.appendChild(v);
+    return row;
+  }
+
+  // Object/Array — check if any descendants changed
+  const hasChangedDescendant = [...changedPaths].some(p => p === myPath || p.startsWith(myPath ? myPath + '.' : ''));
+  const container = document.createElement('div');
+  container.className = 'ov-node';
+
+  const header = document.createElement('div');
+  header.className = 'ov-header';
+
+  const arrow = document.createElement('span');
+  arrow.className = 'ov-arrow';
+  arrow.textContent = '\u25B6';
+  header.appendChild(arrow);
+
+  if (key !== null) {
+    const k = document.createElement('span');
+    k.className = 'ov-key';
+    if (hasChangedDescendant) k.style.color = isOld ? 'var(--red)' : 'var(--green)';
+    k.textContent = `${key}: `;
+    header.appendChild(k);
+  }
+
+  const preview = document.createElement('span');
+  preview.className = 'ov-preview';
+  preview.textContent = isArray ? `Array(${val.length})` : `{${Object.keys(val).length} keys}`;
+  header.appendChild(preview);
+
+  container.appendChild(header);
+
+  const children = document.createElement('div');
+  children.className = 'ov-children';
+  // Auto-expand if this node has changed descendants, otherwise collapse
+  children.style.display = hasChangedDescendant ? 'block' : 'none';
+  if (hasChangedDescendant) { arrow.textContent = '\u25BC'; arrow.classList.add('open'); }
+
+  let populated = false;
+  function populate() {
+    if (populated) return;
+    populated = true;
+    const entries = isArray ? val.map((v, i) => [i, v]) : Object.entries(val);
+    entries.forEach(([k, v]) => {
+      children.appendChild(_createHighlightedTree(k, v, changedPaths, myPath, isOld));
+    });
+  }
+
+  // Populate immediately if expanded, otherwise lazy
+  if (hasChangedDescendant) populate();
+
+  header.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = children.style.display !== 'none';
+    children.style.display = open ? 'none' : 'block';
+    arrow.textContent = open ? '\u25B6' : '\u25BC';
+    if (!open) populate();
+  });
+
+  container.appendChild(children);
+  return container;
+}
+
 function handleReduxEvent(event) {
   if (event.type !== 'redux') return;
   const { action, nextState } = event;
@@ -2004,6 +2112,29 @@ function handleReduxEvent(event) {
   }
 }
 
+// Assign a consistent color to each Redux action category (e.g. ANALYTICS, CART, USER)
+const _reduxCatColors = {};
+const _reduxColorPalette = [
+  'var(--accent)',   // blue
+  'var(--green)',    // green
+  'var(--orange)',   // orange
+  'var(--accent2)',  // purple
+  '#e06c75',        // coral
+  '#56b6c2',        // teal
+  '#c678dd',        // magenta
+  '#d19a66',        // gold
+  '#98c379',        // lime
+  '#e5c07b',        // yellow
+];
+let _reduxColorIdx = 0;
+function _reduxCategoryColor(category) {
+  if (!_reduxCatColors[category]) {
+    _reduxCatColors[category] = _reduxColorPalette[_reduxColorIdx % _reduxColorPalette.length];
+    _reduxColorIdx++;
+  }
+  return _reduxCatColors[category];
+}
+
 function renderRedux() {
   const content = $('reduxContent');
   const empty = $('reduxEmpty');
@@ -2031,12 +2162,32 @@ function renderRedux() {
     const header = document.createElement('div');
     header.className = 'rdx-entry-header';
     const changesBadge = a.changedKeys?.length ? `<span class="rdx-changes">${a.changedKeys.length} changed</span>` : '';
-    header.innerHTML = `<span class="rdx-index">#${a.index}</span><span class="rdx-type">${esc(a.type)}</span>${changesBadge}<span class="rdx-time">${ts(a.ts)}</span>`;
+    // Color-code action type by category prefix (e.g. ANALYTICS/, CART/, USER/)
+    const typeParts = a.type.split('/');
+    let typeHtml;
+    if (typeParts.length >= 2) {
+      const catColor = _reduxCategoryColor(typeParts[0]);
+      typeHtml = `<span class="rdx-type-cat" style="color:${catColor}">${esc(typeParts[0])}/</span><span class="rdx-type-name">${esc(typeParts.slice(1).join('/'))}</span>`;
+    } else {
+      typeHtml = `<span class="rdx-type">${esc(a.type)}</span>`;
+    }
+    header.innerHTML = `<span class="rdx-index">#${a.index}</span>${typeHtml}${changesBadge}<span class="rdx-time">${ts(a.ts)}</span>`;
     // Toggle: click to expand, click again to collapse
     header.addEventListener('click', () => {
       state.redux.selected = isSelected ? -1 : a.index;
       renderRedux();
     });
+    // Right-click to copy action type
+    header.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showContextMenu(e, [
+        { label: 'Copy Action Type', action: () => navigator.clipboard.writeText(a.type) },
+        { label: 'Copy Action Payload', action: () => navigator.clipboard.writeText(JSON.stringify(a.payload, null, 2)) },
+      ]);
+    });
+    // Allow text selection on the action type
+    header.style.userSelect = 'text';
     entry.appendChild(header);
 
     // Expanded detail — only for explicitly selected action
@@ -2062,18 +2213,15 @@ function renderRedux() {
         detail.appendChild(createTreeNode(null, a.payload, false));
       }
 
-      // Store changes — show ONLY the changed leaf values, not entire state
+      // Store changes — show full Previous and Current state for each changed key
+      // with changed sub-keys highlighted
       const prevS = a.index > 0 ? states[a.index - 1] : null;
       const currS = states[a.index];
       if (currS && typeof currS === 'object' && a.changedKeys?.length > 0) {
-        const sLabel = document.createElement('div');
-        sLabel.className = 'redux-section-title';
-        sLabel.textContent = 'Store Changes';
-        detail.appendChild(sLabel);
-
         a.changedKeys.forEach(key => {
           const keyWrap = document.createElement('div');
           keyWrap.className = 'rdx-store-diff';
+
           const kLabel = document.createElement('div');
           kLabel.className = 'rdx-store-key-label';
           kLabel.textContent = key;
@@ -2082,29 +2230,34 @@ function renderRedux() {
           const oldVal = prevS ? prevS[key] : undefined;
           const newVal = currS[key];
 
-          // Deep diff: find only the leaf values that actually changed
-          const leafChanges = _findLeafChanges(oldVal, newVal, key);
-          if (leafChanges.length > 0) {
-            leafChanges.forEach(change => {
-              const row = document.createElement('div');
-              row.className = 'rdx-diff-leaf';
-              row.innerHTML = `<span class="rdx-diff-path">${esc(change.path)}</span>`
-                + `<span class="rdx-diff-old">${esc(String(change.oldVal ?? 'undefined'))}</span>`
-                + `<span class="rdx-diff-arrow">→</span>`
-                + `<span class="rdx-diff-new">${esc(String(change.newVal ?? 'undefined'))}</span>`;
-              keyWrap.appendChild(row);
-            });
-          } else {
-            // Fallback: show old → new for the whole key
-            const row = document.createElement('div');
-            row.className = 'rdx-diff-leaf';
-            const oldStr = oldVal === undefined ? 'undefined' : (typeof oldVal === 'object' ? JSON.stringify(oldVal) : String(oldVal));
-            const newStr = newVal === undefined ? 'undefined' : (typeof newVal === 'object' ? JSON.stringify(newVal) : String(newVal));
-            row.innerHTML = `<span class="rdx-diff-old">${esc(oldStr)}</span>`
-              + `<span class="rdx-diff-arrow">→</span>`
-              + `<span class="rdx-diff-new">${esc(newStr)}</span>`;
-            keyWrap.appendChild(row);
+          // Find which sub-keys changed (for highlighting)
+          const changedPaths = new Set();
+          _findLeafChanges(oldVal, newVal, '').forEach(c => changedPaths.add(c.path));
+
+          // Previous state
+          if (oldVal !== undefined) {
+            const prevLabel = document.createElement('div');
+            prevLabel.className = 'rdx-state-label prev';
+            prevLabel.textContent = '- Previous';
+            keyWrap.appendChild(prevLabel);
+            const prevTree = document.createElement('div');
+            prevTree.className = 'rdx-state-tree prev';
+            prevTree.appendChild(_createHighlightedTree(null, oldVal, changedPaths, '', true));
+            keyWrap.appendChild(prevTree);
           }
+
+          // Current state
+          if (newVal !== undefined) {
+            const currLabel = document.createElement('div');
+            currLabel.className = 'rdx-state-label curr';
+            currLabel.textContent = '+ Current';
+            keyWrap.appendChild(currLabel);
+            const currTree = document.createElement('div');
+            currTree.className = 'rdx-state-tree curr';
+            currTree.appendChild(_createHighlightedTree(null, newVal, changedPaths, '', false));
+            keyWrap.appendChild(currTree);
+          }
+
           detail.appendChild(keyWrap);
         });
       }

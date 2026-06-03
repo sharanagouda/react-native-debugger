@@ -968,6 +968,13 @@ body {
 .rdx-diff-old { color: var(--red); text-decoration: line-through; opacity: 0.8; word-break: break-all; }
 .rdx-diff-arrow { color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
 .rdx-diff-new { color: var(--green); font-weight: 600; word-break: break-all; }
+.rdx-state-label { font-size: 10px; font-weight: 700; padding: 4px 8px 2px; margin-top: 4px; letter-spacing: 0.5px; }
+.rdx-state-label.prev { color: var(--red); }
+.rdx-state-label.curr { color: var(--green); }
+.rdx-state-tree { padding: 2px 0 4px 4px; border-left: 2px solid var(--border); margin-left: 4px; }
+.rdx-state-tree.prev { border-left-color: rgba(255,94,114,.3); }
+.rdx-state-tree.curr { border-left-color: rgba(61,214,140,.3); }
+.rdx-highlight { font-weight: 600; }
 .rdx-diff-sign { font-weight: 700; font-size: 11px; flex-shrink: 0; width: 14px; text-align: center; }
 .rdx-diff-row.removed .rdx-diff-sign { color: var(--red); }
 .rdx-diff-row.added .rdx-diff-sign { color: var(--green); }
