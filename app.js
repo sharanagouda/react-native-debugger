@@ -373,7 +373,7 @@ function initConsolePanel() {
       <div class="empty-state" id="consoleEmpty">
         <div class="icon">⬛</div>
         <div class="label">No logs yet</div>
-        <div class="hint">Add RNDebugSDK.js to your app</div>
+        <div class="hint">Logs will appear here automatically</div>
       </div>
     </div>
     <div class="console-find-bar" id="consoleFindBar" style="display:none">
@@ -519,23 +519,29 @@ function flushConsoleBatch() {
   let added = 0;
 
   batch.forEach(l => {
-    if (levelFilters && !levelFilters[l.level]) return;
+    // Redux logs use showRedux flag; regular logs use levelFilters
+    if (l.level === 'redux') {
+      if (!state.console.showRedux) return;
+    } else if (levelFilters && !levelFilters[l.level]) return;
     if (searchFilter && !l.message?.toLowerCase().includes(searchFilter)) return;
     frag.appendChild(buildLogRow(l));
     added++;
   });
 
   if (added > 0) {
-    empty.style.display = 'none';
+    // Hide empty state as soon as we have visible rows
+    if (empty) empty.style.display = 'none';
+    // Auto-scroll only if user is already near the bottom (within 150px)
+    const wasAtBottom = (list.scrollHeight - list.scrollTop - list.clientHeight) < 150;
     list.appendChild(frag);
-    // Keep DOM size manageable — remove oldest rows if over 500
+    // Keep DOM size manageable — remove oldest rows if over limit
     const rows = list.querySelectorAll('.log-row');
-    const MAX_DOM_ROWS = 500;
+    const MAX_DOM_ROWS = 5000;
     if (rows.length > MAX_DOM_ROWS) {
       const toRemove = rows.length - MAX_DOM_ROWS;
       for (let i = 0; i < toRemove; i++) rows[i].remove();
     }
-    list.scrollTop = list.scrollHeight;
+    if (wasAtBottom) list.scrollTop = list.scrollHeight;
   }
 }
 
@@ -912,16 +918,31 @@ function renderConsole() {
 
   const { levelFilters, searchFilter } = state.console;
   const visible = state.console.logs.filter(l => {
-    if (levelFilters && !levelFilters[l.level]) return false;
+    // Redux logs use showRedux flag; regular logs use levelFilters
+    if (l.level === 'redux') {
+      if (!state.console.showRedux) return false;
+    } else if (levelFilters && !levelFilters[l.level]) return false;
     if (searchFilter && !l.message?.toLowerCase().includes(searchFilter)) return false;
     return true;
   });
 
   list.querySelectorAll('.log-row').forEach(e => e.remove());
-  empty.style.display = visible.length ? 'none' : 'flex';
+  if (visible.length > 0) {
+    empty.style.display = 'none';
+  } else if (state.console.logs.length > 0) {
+    // Logs exist but are all filtered out
+    empty.querySelector('.label').textContent = 'No matching logs';
+    empty.querySelector('.hint').textContent = 'Adjust level filters or clear search to see logs';
+    empty.style.display = 'flex';
+  } else {
+    // No logs at all
+    empty.querySelector('.label').textContent = 'No logs yet';
+    empty.querySelector('.hint').textContent = 'Logs will appear here automatically';
+    empty.style.display = 'flex';
+  }
 
-  // Render only the last 500 visible rows for performance
-  const MAX_RENDER = 500;
+  // Render only the last N visible rows for performance
+  const MAX_RENDER = 5000;
   const toRender = visible.length > MAX_RENDER ? visible.slice(-MAX_RENDER) : visible;
   if (visible.length > MAX_RENDER) {
     const info = document.createElement('div');
@@ -1919,6 +1940,38 @@ function _deepEqual(a, b) {
   } catch { return false; }
 }
 
+// Find leaf-level changes between two values (for Redux store diff)
+function _findLeafChanges(oldVal, newVal, basePath, maxDepth) {
+  const changes = [];
+  if (maxDepth === undefined) maxDepth = 5;
+
+  function walk(a, b, path, depth) {
+    if (depth > maxDepth) {
+      if (!_deepEqual(a, b)) changes.push({ path, oldVal: a, newVal: b });
+      return;
+    }
+    if (a === b) return;
+    if (a == null || b == null || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) !== Array.isArray(b)) {
+      changes.push({ path, oldVal: a, newVal: b });
+      return;
+    }
+    const allKeys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    allKeys.forEach(k => {
+      if (!_deepEqual(a[k], b[k])) {
+        const childPath = path ? `${path}.${k}` : k;
+        if (a[k] != null && b[k] != null && typeof a[k] === 'object' && typeof b[k] === 'object' && !Array.isArray(a[k])) {
+          walk(a[k], b[k], childPath, depth + 1);
+        } else {
+          changes.push({ path: childPath, oldVal: a[k], newVal: b[k] });
+        }
+      }
+    });
+  }
+
+  walk(oldVal, newVal, '', 0);
+  return changes;
+}
+
 function handleReduxEvent(event) {
   if (event.type !== 'redux') return;
   const { action, nextState } = event;
@@ -1934,12 +1987,12 @@ function handleReduxEvent(event) {
   const actionEntry = { type: action?.type || '?', payload: action, ts: event.ts, index: idx, changedKeys };
   state.redux.actions.push(actionEntry);
   state.redux.states.push(nextState);
-  state.redux.selected = idx;
+  // Don't auto-select — keep all collapsed until user clicks
   $('rBadge').textContent = state.redux.actions.length;
   renderRedux();
 
-  // Also add to console logs if Redux is enabled in console dropdown
-  if (state.console.showRedux) {
+  // Always add Redux actions to console logs — visibility controlled by showRedux filter
+  {
     const msg = `[Redux] ${actionEntry.type}` + (changedKeys.length ? ` (changed: ${changedKeys.join(', ')})` : '');
     addConsoleLog({
       level: 'redux',
@@ -1965,28 +2018,29 @@ function renderRedux() {
   if (!visible.length) return;
 
   const ttLabel = $('ttLabel');
-  if (ttLabel) ttLabel.textContent = `${selected + 1}/${actions.length}`;
+  if (ttLabel) ttLabel.textContent = selected >= 0 ? `${selected + 1}/${actions.length}` : `—/${actions.length}`;
 
   const frag = document.createDocumentFragment();
   visible.forEach(a => {
     const isSelected = a.index === selected;
-    const isPrev = a.index === selected - 1;
-    const isNext = a.index === selected + 1;
 
     const entry = document.createElement('div');
-    entry.className = 'rdx-entry' + (isSelected ? ' selected' : '') + (isPrev ? ' is-prev' : '') + (isNext ? ' is-next' : '');
+    entry.className = 'rdx-entry' + (isSelected ? ' selected' : '');
 
     // Row header — always visible
     const header = document.createElement('div');
     header.className = 'rdx-entry-header';
-    const changesBadge = a.changedKeys?.length ? `<span class="rdx-changes">${a.changedKeys.length}</span>` : '';
-    const roleTag = isPrev ? '<span class="rdx-role prev">PREV</span>' : isNext ? '<span class="rdx-role next">NEXT</span>' : isSelected ? '<span class="rdx-role current">CURRENT</span>' : '';
-    header.innerHTML = `<span class="rdx-index">#${a.index}</span>${roleTag}<span class="rdx-type">${esc(a.type)}</span>${changesBadge}<span class="rdx-time">${ts(a.ts)}</span>`;
-    header.addEventListener('click', () => { state.redux.selected = a.index; renderRedux(); });
+    const changesBadge = a.changedKeys?.length ? `<span class="rdx-changes">${a.changedKeys.length} changed</span>` : '';
+    header.innerHTML = `<span class="rdx-index">#${a.index}</span><span class="rdx-type">${esc(a.type)}</span>${changesBadge}<span class="rdx-time">${ts(a.ts)}</span>`;
+    // Toggle: click to expand, click again to collapse
+    header.addEventListener('click', () => {
+      state.redux.selected = isSelected ? -1 : a.index;
+      renderRedux();
+    });
     entry.appendChild(header);
 
-    // Expanded detail for selected / prev / next
-    if (isSelected || isPrev || isNext) {
+    // Expanded detail — only for explicitly selected action
+    if (isSelected) {
       const detail = document.createElement('div');
       detail.className = 'rdx-entry-detail';
 
@@ -2003,46 +2057,56 @@ function renderRedux() {
       if (a.payload) {
         const pLabel = document.createElement('div');
         pLabel.className = 'redux-section-title';
-        pLabel.textContent = 'Payload';
+        pLabel.textContent = 'Action Payload';
         detail.appendChild(pLabel);
-        detail.appendChild(createTreeNode(null, a.payload, !isSelected));
+        detail.appendChild(createTreeNode(null, a.payload, false));
       }
 
-      // Store changes (only for selected)
-      if (isSelected) {
-        const prevS = a.index > 0 ? states[a.index - 1] : null;
-        const currS = states[a.index];
-        if (currS && typeof currS === 'object' && a.changedKeys?.length > 0) {
-          const sLabel = document.createElement('div');
-          sLabel.className = 'redux-section-title';
-          sLabel.textContent = 'Store Changes';
-          detail.appendChild(sLabel);
+      // Store changes — show ONLY the changed leaf values, not entire state
+      const prevS = a.index > 0 ? states[a.index - 1] : null;
+      const currS = states[a.index];
+      if (currS && typeof currS === 'object' && a.changedKeys?.length > 0) {
+        const sLabel = document.createElement('div');
+        sLabel.className = 'redux-section-title';
+        sLabel.textContent = 'Store Changes';
+        detail.appendChild(sLabel);
 
-          a.changedKeys.forEach(key => {
-            const keyWrap = document.createElement('div');
-            keyWrap.className = 'rdx-store-diff';
-            const kLabel = document.createElement('div');
-            kLabel.className = 'rdx-store-key-label';
-            kLabel.textContent = key;
-            keyWrap.appendChild(kLabel);
+        a.changedKeys.forEach(key => {
+          const keyWrap = document.createElement('div');
+          keyWrap.className = 'rdx-store-diff';
+          const kLabel = document.createElement('div');
+          kLabel.className = 'rdx-store-key-label';
+          kLabel.textContent = key;
+          keyWrap.appendChild(kLabel);
 
-            if (prevS && prevS[key] !== undefined) {
-              const prevRow = document.createElement('div');
-              prevRow.className = 'rdx-diff-row removed';
-              prevRow.innerHTML = '<span class="rdx-diff-sign">-</span>';
-              prevRow.appendChild(createTreeNode(null, prevS[key], true));
-              keyWrap.appendChild(prevRow);
-            }
-            if (currS[key] !== undefined) {
-              const newRow = document.createElement('div');
-              newRow.className = 'rdx-diff-row added';
-              newRow.innerHTML = '<span class="rdx-diff-sign">+</span>';
-              newRow.appendChild(createTreeNode(null, currS[key], true));
-              keyWrap.appendChild(newRow);
-            }
-            detail.appendChild(keyWrap);
-          });
-        }
+          const oldVal = prevS ? prevS[key] : undefined;
+          const newVal = currS[key];
+
+          // Deep diff: find only the leaf values that actually changed
+          const leafChanges = _findLeafChanges(oldVal, newVal, key);
+          if (leafChanges.length > 0) {
+            leafChanges.forEach(change => {
+              const row = document.createElement('div');
+              row.className = 'rdx-diff-leaf';
+              row.innerHTML = `<span class="rdx-diff-path">${esc(change.path)}</span>`
+                + `<span class="rdx-diff-old">${esc(String(change.oldVal ?? 'undefined'))}</span>`
+                + `<span class="rdx-diff-arrow">→</span>`
+                + `<span class="rdx-diff-new">${esc(String(change.newVal ?? 'undefined'))}</span>`;
+              keyWrap.appendChild(row);
+            });
+          } else {
+            // Fallback: show old → new for the whole key
+            const row = document.createElement('div');
+            row.className = 'rdx-diff-leaf';
+            const oldStr = oldVal === undefined ? 'undefined' : (typeof oldVal === 'object' ? JSON.stringify(oldVal) : String(oldVal));
+            const newStr = newVal === undefined ? 'undefined' : (typeof newVal === 'object' ? JSON.stringify(newVal) : String(newVal));
+            row.innerHTML = `<span class="rdx-diff-old">${esc(oldStr)}</span>`
+              + `<span class="rdx-diff-arrow">→</span>`
+              + `<span class="rdx-diff-new">${esc(newStr)}</span>`;
+            keyWrap.appendChild(row);
+          }
+          detail.appendChild(keyWrap);
+        });
       }
 
       entry.appendChild(detail);
@@ -2052,12 +2116,10 @@ function renderRedux() {
   });
 
   content.appendChild(frag);
-  // Auto-scroll: if asc (latest at bottom), scroll to bottom; otherwise scroll selected into view
-  if (state.redux.sortDir === 'asc') {
-    content.scrollTop = content.scrollHeight;
-  } else {
-    const selEl = content.querySelector('.rdx-entry.selected');
-    if (selEl) selEl.scrollIntoView({ block: 'nearest' });
+  // Scroll selected entry into view
+  const selEl = content.querySelector('.rdx-entry.selected');
+  if (selEl) {
+    selEl.scrollIntoView({ block: 'nearest', behavior: 'auto' });
   }
 }
 

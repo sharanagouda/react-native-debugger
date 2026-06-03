@@ -50,16 +50,17 @@ let _debuggerDetected = false;
 let _debuggerCheckInterval = null;
 
 function _checkDebuggerAttached() {
-  // Method 1: Check if Hermes debugger globals are set
+  // Method 1: Check if Hermes debugger globals are set (only when actively connected)
   const hermesDebugger = !!(global.__DEBUGGER_CONNECTED__ || global.__HERMES_DEBUGGER_CONNECTED__);
-  // Method 2: Check React DevTools hook for debugger attachment
+  // Method 2: Check React DevTools hook for active debugger session
   const rdtHook = global.__REACT_DEVTOOLS_GLOBAL_HOOK__;
   const rdtDebugger = !!(rdtHook && rdtHook._debuggerAttached);
-  // Method 3: Check if CDP is connected via the inspector agent
-  const inspectorConnected = !!(global.__inspectorGlobalObject || global.__inspector);
+  // Note: global.__inspector and global.__inspectorGlobalObject are always present
+  // on Hermes as part of the built-in inspector infrastructure. They do NOT indicate
+  // that a debugger is actively connected. Only check explicit connection flags.
 
   const wasDetected = _debuggerDetected;
-  _debuggerDetected = hermesDebugger || rdtDebugger || inspectorConnected;
+  _debuggerDetected = hermesDebugger || rdtDebugger;
 
   if (_debuggerDetected && !wasDetected) {
     _console.log('[RNDebugSDK] Debugger detected — SDK interception paused to avoid inspector conflicts. Use the ReactoRadar app to resume.');

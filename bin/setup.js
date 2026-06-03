@@ -116,8 +116,14 @@ function findEntryFile(projectDir) {
 
 // ─── Find Redux store file ───────────────────────────────────────────────────
 function findStoreFile(projectDir) {
-  const searchDirs = ['src', 'app', 'store', 'redux', 'src/store', 'src/redux', 'app/store', 'app/redux', 'src/app/store'];
-  const storeNames = ['store.ts', 'store.js', 'store.tsx', 'index.ts', 'index.js'];
+  const searchDirs = [
+    'src', 'app', 'store', 'redux', 'state',
+    'src/store', 'src/redux', 'src/state', 'src/app', 'src/app/store',
+    'app/store', 'app/redux', 'app/state',
+    'src/features', 'src/lib', 'src/config', 'src/core',
+    'src/services', 'src/utils',
+  ];
+  const storeNames = ['store.ts', 'store.js', 'store.tsx', 'store.jsx', 'index.ts', 'index.js', 'index.tsx'];
 
   for (const dir of searchDirs) {
     for (const name of storeNames) {
@@ -130,7 +136,31 @@ function findStoreFile(projectDir) {
       }
     }
   }
-  return null;
+
+  // Deep search: recursively find any file with configureStore/createStore
+  try {
+    const glob = (dir, depth) => {
+      if (depth > 4) return null;
+      let entries;
+      try { entries = fs.readdirSync(path.join(projectDir, dir), { withFileTypes: true }); } catch { return null; }
+      for (const e of entries) {
+        if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+        const rel = path.join(dir, e.name);
+        if (e.isFile() && /\.(ts|js|tsx|jsx)$/.test(e.name) && /store/i.test(e.name)) {
+          const content = fs.readFileSync(path.join(projectDir, rel), 'utf8');
+          if (content.includes('configureStore') || content.includes('createStore')) {
+            return rel;
+          }
+        }
+        if (e.isDirectory()) {
+          const found = glob(rel, depth + 1);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return glob('src', 0) || glob('app', 0) || glob('.', 1);
+  } catch { return null; }
 }
 
 // ─── Install ─────────────────────────────────────────────────────────────────
