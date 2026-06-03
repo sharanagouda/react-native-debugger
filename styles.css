@@ -924,7 +924,10 @@ body {
 .rdx-entry-header:hover { background: var(--bg3); }
 .rdx-entry.selected .rdx-entry-header { border-left: 3px solid var(--accent); }
 .rdx-index { font-size: 9px; color: var(--text-dim); min-width: 20px; text-align: right; flex-shrink: 0; }
-.rdx-type { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-bright); font-weight: 500; }
+.rdx-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-bright); font-weight: 500; }
+.rdx-type-cat { font-weight: 700; }
+.rdx-type-name { color: var(--text-bright); font-weight: 500; }
+.rdx-header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .rdx-changes {
   font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 8px;
   background: rgba(255,94,114,.12); color: var(--red); flex-shrink: 0;
@@ -968,12 +971,16 @@ body {
 .rdx-diff-old { color: var(--red); text-decoration: line-through; opacity: 0.8; word-break: break-all; }
 .rdx-diff-arrow { color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
 .rdx-diff-new { color: var(--green); font-weight: 600; word-break: break-all; }
-.rdx-state-label { font-size: 10px; font-weight: 700; padding: 4px 8px 2px; margin-top: 4px; letter-spacing: 0.5px; }
+.rdx-state-label { font-size: 10px; font-weight: 700; padding: 4px 0 2px; letter-spacing: 0.5px; }
 .rdx-state-label.prev { color: var(--red); }
 .rdx-state-label.curr { color: var(--green); }
-.rdx-state-tree { padding: 2px 0 4px 4px; border-left: 2px solid var(--border); margin-left: 4px; }
-.rdx-state-tree.prev { border-left-color: rgba(255,94,114,.3); }
-.rdx-state-tree.curr { border-left-color: rgba(61,214,140,.3); }
+.rdx-diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+.rdx-diff-col { min-width: 0; overflow: auto; max-height: 400px; padding: 4px; border-radius: 4px; font-size: 11px; }
+.rdx-diff-col.prev { background: rgba(255,94,114,.04); border: 1px solid rgba(255,94,114,.12); }
+.rdx-diff-col.curr { background: rgba(61,214,140,.04); border: 1px solid rgba(61,214,140,.12); }
+.rdx-close-btn { position: absolute; top: 6px; right: 8px; background: var(--bg3); border: 1px solid var(--border); color: var(--text-dim); font-size: 11px; width: 22px; height: 22px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 1; }
+.rdx-close-btn:hover { background: var(--bg4); color: var(--text); }
+.rdx-entry-detail { position: relative; }
 .rdx-highlight { font-weight: 600; }
 .rdx-diff-sign { font-weight: 700; font-size: 11px; flex-shrink: 0; width: 14px; text-align: center; }
 .rdx-diff-row.removed .rdx-diff-sign { color: var(--red); }

@@ -2051,9 +2051,8 @@ function _createHighlightedTree(key, val, changedPaths, currentPath, isOld) {
 
   const children = document.createElement('div');
   children.className = 'ov-children';
-  // Auto-expand if this node has changed descendants, otherwise collapse
-  children.style.display = hasChangedDescendant ? 'block' : 'none';
-  if (hasChangedDescendant) { arrow.textContent = '\u25BC'; arrow.classList.add('open'); }
+  // Always start collapsed — user expands what they need
+  children.style.display = 'none';
 
   let populated = false;
   function populate() {
@@ -2064,9 +2063,6 @@ function _createHighlightedTree(key, val, changedPaths, currentPath, isOld) {
       children.appendChild(_createHighlightedTree(k, v, changedPaths, myPath, isOld));
     });
   }
-
-  // Populate immediately if expanded, otherwise lazy
-  if (hasChangedDescendant) populate();
 
   header.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -2171,7 +2167,7 @@ function renderRedux() {
     } else {
       typeHtml = `<span class="rdx-type">${esc(a.type)}</span>`;
     }
-    header.innerHTML = `<span class="rdx-index">#${a.index}</span>${typeHtml}${changesBadge}<span class="rdx-time">${ts(a.ts)}</span>`;
+    header.innerHTML = `<span class="rdx-index">#${a.index}</span>${typeHtml}<span class="rdx-header-right">${changesBadge}<span class="rdx-time">${ts(a.ts)}</span></span>`;
     // Toggle: click to expand, click again to collapse
     header.addEventListener('click', () => {
       state.redux.selected = isSelected ? -1 : a.index;
@@ -2195,6 +2191,18 @@ function renderRedux() {
       const detail = document.createElement('div');
       detail.className = 'rdx-entry-detail';
 
+      // Close button
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'rdx-close-btn';
+      closeBtn.textContent = '✕';
+      closeBtn.title = 'Close';
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.redux.selected = -1;
+        renderRedux();
+      });
+      detail.appendChild(closeBtn);
+
       // Changed keys badges
       if (a.changedKeys?.length > 0) {
         const keysEl = document.createElement('div');
@@ -2213,8 +2221,7 @@ function renderRedux() {
         detail.appendChild(createTreeNode(null, a.payload, false));
       }
 
-      // Store changes — show full Previous and Current state for each changed key
-      // with changed sub-keys highlighted
+      // Store changes — two-column layout: Previous | Current
       const prevS = a.index > 0 ? states[a.index - 1] : null;
       const currS = states[a.index];
       if (currS && typeof currS === 'object' && a.changedKeys?.length > 0) {
@@ -2234,30 +2241,63 @@ function renderRedux() {
           const changedPaths = new Set();
           _findLeafChanges(oldVal, newVal, '').forEach(c => changedPaths.add(c.path));
 
-          // Previous state
+          // Two-column grid: Previous | Current
+          const grid = document.createElement('div');
+          grid.className = 'rdx-diff-grid';
+
+          // Previous column
+          const prevCol = document.createElement('div');
+          prevCol.className = 'rdx-diff-col prev';
+          const prevLabel = document.createElement('div');
+          prevLabel.className = 'rdx-state-label prev';
+          prevLabel.textContent = '- Previous';
+          prevCol.appendChild(prevLabel);
           if (oldVal !== undefined) {
-            const prevLabel = document.createElement('div');
-            prevLabel.className = 'rdx-state-label prev';
-            prevLabel.textContent = '- Previous';
-            keyWrap.appendChild(prevLabel);
-            const prevTree = document.createElement('div');
-            prevTree.className = 'rdx-state-tree prev';
-            prevTree.appendChild(_createHighlightedTree(null, oldVal, changedPaths, '', true));
-            keyWrap.appendChild(prevTree);
+            prevCol.appendChild(_createHighlightedTree(null, oldVal, changedPaths, '', true));
+          } else {
+            const na = document.createElement('span');
+            na.style.cssText = 'color:var(--text-dim);font-size:10px;font-style:italic';
+            na.textContent = 'undefined';
+            prevCol.appendChild(na);
           }
+          grid.appendChild(prevCol);
 
-          // Current state
+          // Current column
+          const currCol = document.createElement('div');
+          currCol.className = 'rdx-diff-col curr';
+          const currLabel = document.createElement('div');
+          currLabel.className = 'rdx-state-label curr';
+          currLabel.textContent = '+ Current';
+          currCol.appendChild(currLabel);
           if (newVal !== undefined) {
-            const currLabel = document.createElement('div');
-            currLabel.className = 'rdx-state-label curr';
-            currLabel.textContent = '+ Current';
-            keyWrap.appendChild(currLabel);
-            const currTree = document.createElement('div');
-            currTree.className = 'rdx-state-tree curr';
-            currTree.appendChild(_createHighlightedTree(null, newVal, changedPaths, '', false));
-            keyWrap.appendChild(currTree);
+            currCol.appendChild(_createHighlightedTree(null, newVal, changedPaths, '', false));
+          } else {
+            const na = document.createElement('span');
+            na.style.cssText = 'color:var(--text-dim);font-size:10px;font-style:italic';
+            na.textContent = 'undefined';
+            currCol.appendChild(na);
           }
+          grid.appendChild(currCol);
 
+          // Right-click to copy on each column
+          prevCol.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            showContextMenu(e, [
+              { label: 'Copy Previous Value', action: () => navigator.clipboard.writeText(JSON.stringify(oldVal, null, 2)) },
+              { label: 'Copy Current Value', action: () => navigator.clipboard.writeText(JSON.stringify(newVal, null, 2)) },
+              { label: `Copy "${key}" key`, action: () => navigator.clipboard.writeText(key) },
+            ]);
+          });
+          currCol.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            showContextMenu(e, [
+              { label: 'Copy Current Value', action: () => navigator.clipboard.writeText(JSON.stringify(newVal, null, 2)) },
+              { label: 'Copy Previous Value', action: () => navigator.clipboard.writeText(JSON.stringify(oldVal, null, 2)) },
+              { label: `Copy "${key}" key`, action: () => navigator.clipboard.writeText(key) },
+            ]);
+          });
+
+          keyWrap.appendChild(grid);
           detail.appendChild(keyWrap);
         });
       }
