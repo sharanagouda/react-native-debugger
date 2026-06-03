@@ -19,6 +19,15 @@ const PORTS = {
 let mainWindow = null;
 let devtoolsWindow = null;  // hosts the embedded CDP DevTools frontend
 
+// Safe IPC send — prevents "Object has been destroyed" crash
+function _send(channel, ...args) {
+  try {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send(channel, ...args);
+    }
+  } catch {}
+}
+
 // ─── State ────────────────────────────────────────────────────────────────────
 let reduxClients   = new Set();
 let storageClients = new Set();
@@ -27,8 +36,32 @@ let networkClients = new Set();
 // ─── Set dock icon ASAP (before app ready) ──────────────────────────────────
 const _appIcon = nativeImage.createFromPath(path.join(__dirname, 'ReactoRadar.png'));
 
+// ─── Single Instance Lock ────────────────────────────────────────────────────
+// Prevent multiple ReactoRadar instances from running simultaneously.
+// If a second instance launches, focus the existing window instead.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  // Another instance is already running — show a dialog and quit
+  const { dialog } = require('electron');
+  app.whenReady().then(() => {
+    dialog.showErrorBox(
+      'ReactoRadar is already running',
+      'Another instance of ReactoRadar is already open.\n\nPlease close the existing instance first, or check your system tray / dock.\n\nIf the old version is stuck, run:\n  kill $(lsof -ti :9092) \nin your terminal to stop it.'
+    );
+    app.quit();
+  });
+} else {
+  app.on('second-instance', () => {
+    // Focus the existing window when someone tries to open a second instance
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
-app.whenReady().then(async () => {
+if (gotLock) app.whenReady().then(async () => {
   nativeTheme.themeSource = 'dark';
 
   // Set dock icon on macOS
@@ -42,11 +75,11 @@ app.whenReady().then(async () => {
   let appVersion;
   try { appVersion = require('./package.json').version; } catch { appVersion = app.getVersion(); }
   // Send multiple times to ensure renderer catches it
-  mainWindow?.webContents.on('did-finish-load', () => {
+  mainWindow.webContents.on('did-finish-load', () => {
     [200, 1000, 3000].forEach(delay => {
       setTimeout(() => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('app-version', appVersion);
+          _send('app-version', appVersion);
         }
       }, delay);
     });
@@ -102,7 +135,7 @@ async function createMainWindow() {
 
   // Open the JS Debugger panel (CDP DevTools) in a second window
   mainWindow.webContents.on('did-finish-load', () => {
-    mainWindow.webContents.send('ports', PORTS);
+    _send('ports', PORTS);
   });
 }
 
@@ -133,7 +166,7 @@ function checkForUpdates() {
           [500, 2000, 5000].forEach(delay => {
             setTimeout(() => {
               if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('update-available', payload);
+                _send('update-available', payload);
               }
             }, delay);
           });
@@ -203,7 +236,7 @@ function fetchCDPTargets(callback) {
           t.type === 'node' || t.devtoolsFrontendUrl
         );
         lastKnownTargets = rnTargets;
-        mainWindow?.webContents.send('cdp-targets', rnTargets);
+        _send('cdp-targets', rnTargets);
         if (callback) callback(rnTargets);
       } catch (_) {
         if (callback) callback([]);
@@ -211,7 +244,7 @@ function fetchCDPTargets(callback) {
     });
   }).on('error', () => {
     lastKnownTargets = [];
-    mainWindow?.webContents.send('cdp-targets', []);
+    _send('cdp-targets', []);
     if (callback) callback([]);
   });
 }
@@ -235,13 +268,13 @@ function startReactDevToolsServer() {
     reactDTServer.on('error', (err) => {
       console.warn(`[ReactDT] Server error: ${err.message}`);
       if (err.code === 'EADDRINUSE') {
-        mainWindow?.webContents.send('react-dt-status', false);
+        _send('react-dt-status', false);
       }
     });
     reactDTServer.on('connection', (ws) => {
       reactDTClients.add(ws);
       console.log(`[ReactDT] Client connected (total: ${reactDTClients.size})`);
-      mainWindow?.webContents.send('react-dt-status', true);
+      _send('react-dt-status', true);
 
       // Relay messages between all connected clients (frontend ↔ backend)
       ws.on('message', (data) => {
@@ -256,7 +289,7 @@ function startReactDevToolsServer() {
         reactDTClients.delete(ws);
         console.log(`[ReactDT] Client disconnected (total: ${reactDTClients.size})`);
         if (reactDTClients.size === 0) {
-          mainWindow?.webContents.send('react-dt-status', false);
+          _send('react-dt-status', false);
         }
       });
     });
@@ -270,53 +303,67 @@ function startReactDevToolsServer() {
 function startBridgeServers() {
   // Redux Bridge
   startBridge(PORTS.REDUX_BRIDGE, 'redux', reduxClients, (event) => {
-    mainWindow?.webContents.send('redux-event', event);
+    _send('redux-event', event);
   });
 
   // AsyncStorage Bridge
   startBridge(PORTS.STORAGE_BRIDGE, 'storage', storageClients, (event) => {
-    mainWindow?.webContents.send('storage-event', event);
+    _send('storage-event', event);
   });
 
   // Network + Console + Perf Bridge (port 9092 carries all types from RNDebugSDK)
   startBridge(PORTS.NETWORK_BRIDGE, 'network', networkClients, (event) => {
     if (event.type === 'control') return;
     if (event.type === 'console') {
-      mainWindow?.webContents.send('console-event', event);
+      _send('console-event', event);
     } else if (event.type === 'perf') {
-      mainWindow?.webContents.send('perf-event', event);
+      _send('perf-event', event);
     } else if (event.type === 'ga4') {
-      mainWindow?.webContents.send('ga4-event', event);
+      _send('ga4-event', event);
     } else {
-      mainWindow?.webContents.send('network-event', event);
+      _send('network-event', event);
     }
   });
 }
 
 function startBridge(port, name, clients, onEvent) {
-  const wss = new WebSocketServer({ port });
-  wss.on('connection', (ws) => {
-    clients.add(ws);
-    console.log(`[${name}] RN app connected`);
-    mainWindow?.webContents.send(`${name}-connected`, true);
-
-    ws.on('message', (raw) => {
-      try {
-        const event = JSON.parse(raw.toString());
-        onEvent(event);
-      } catch (e) {
-        console.warn(`[${name}] Failed to parse message:`, e.message);
+  try {
+    const wss = new WebSocketServer({ port });
+    wss.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`[${name}] Port ${port} is already in use — another ReactoRadar or debugger may be running.`);
+        const { dialog } = require('electron');
+        dialog.showErrorBox(
+          `Port ${port} is in use`,
+          `ReactoRadar cannot start the ${name} bridge because port ${port} is already occupied.\n\nThis usually means an older version of ReactoRadar is still running.\n\nTo fix this, run the following in your terminal:\n  kill $(lsof -ti :${port})\n\nThen restart ReactoRadar.`
+        );
       }
     });
+    wss.on('connection', (ws) => {
+      clients.add(ws);
+      console.log(`[${name}] RN app connected`);
+      _send(`${name}-connected`, true);
 
-    ws.on('close', () => {
-      clients.delete(ws);
-      if (clients.size === 0) {
-        mainWindow?.webContents.send(`${name}-connected`, false);
-      }
+      ws.on('message', (raw) => {
+        try {
+          const event = JSON.parse(raw.toString());
+          onEvent(event);
+        } catch (e) {
+          console.warn(`[${name}] Failed to parse message:`, e.message);
+        }
+      });
+
+      ws.on('close', () => {
+        clients.delete(ws);
+        if (clients.size === 0) {
+          _send(`${name}-connected`, false);
+        }
+      });
     });
-  });
-  console.log(`[${name}] Bridge on :${port}`);
+    console.log(`[${name}] Bridge on :${port}`);
+  } catch (e) {
+    console.error(`[${name}] Failed to start bridge on port ${port}:`, e.message);
+  }
 }
 
 // ─── IPC from Renderer ────────────────────────────────────────────────────────
@@ -359,7 +406,7 @@ function setupIPC() {
     if (isNaN(p) || p < 1024 || p > 65535) return;
     PORTS.METRO = p;
     fetchCDPTargets();
-    mainWindow?.webContents.send('ports', PORTS);
+    _send('ports', PORTS);
   });
 
   ipcMain.on('set-network-capture', (_, enabled) => {
@@ -503,7 +550,7 @@ function buildMenu() {
         {
           label: 'Open JS Debugger (CDP)',
           accelerator: 'Cmd+D',
-          click: () => { mainWindow?.webContents.send('trigger-open-cdp'); },
+          click: () => { _send('trigger-open-cdp'); },
         },
         {
           label: 'Open React DevTools',
@@ -514,7 +561,7 @@ function buildMenu() {
         {
           label: 'Clear All',
           accelerator: 'Cmd+K',
-          click: () => { mainWindow?.webContents.send('clear-all-ui'); },
+          click: () => { _send('clear-all-ui'); },
         },
         { type: 'separator' },
         {
@@ -527,7 +574,7 @@ function buildMenu() {
             const next = themes[(idx + 1) % themes.length];
             nativeTheme.themeSource = next.includes('light') ? 'light' : 'dark';
             if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('theme-changed', next);
+              _send('theme-changed', next);
             }
           },
         },
@@ -547,7 +594,7 @@ function buildMenu() {
         {
           label: 'Find',
           accelerator: 'Cmd+F',
-          click: () => { mainWindow?.webContents.send('focus-search'); },
+          click: () => { _send('focus-search'); },
         },
       ],
     },
