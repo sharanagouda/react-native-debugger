@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setNetworkCapture: (enabled) => ipcRenderer.send('set-network-capture', enabled),
   setStackTraceCapture: (enabled) => ipcRenderer.send('set-stack-trace-capture', enabled),
   setNetworkThrottle: (profile) => ipcRenderer.send('set-network-throttle', profile),
+  setMetroPort: (port) => ipcRenderer.send('set-metro-port', port),
   readSourceFile: (filepath) => ipcRenderer.invoke('read-source-file', filepath),
   openExternal: (url) => ipcRenderer.send('open-external', url),
 });

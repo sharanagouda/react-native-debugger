@@ -34,6 +34,49 @@ let _stackTraceEnabled = false; // Disabled by default for performance
 let _throttleProfile = 'none'; // 'none', 'fast3g', 'slow3g', 'offline'
 const THROTTLE_DELAYS = { none: 0, fast3g: 500, slow3g: 2000, offline: -1 };
 
+// ─── SDK Pause/Resume (allows inspector to work without SDK interference) ────
+// When paused, console/fetch/XHR interception is disabled so the RN inspector
+// and CDP debugger can work without conflicts. Controlled via the debugger app.
+let _sdkPaused = false;
+
+function _isSDKActive() {
+  return !_sdkPaused;
+}
+
+// ─── Debugger Detection ──────────────────────────────────────────────────────
+// Detect if a CDP debugger (Chrome DevTools / Hermes inspector) is attached.
+// When detected, we back off our patches to avoid conflicts with the inspector.
+let _debuggerDetected = false;
+let _debuggerCheckInterval = null;
+
+function _checkDebuggerAttached() {
+  // Method 1: Check if Hermes debugger globals are set
+  const hermesDebugger = !!(global.__DEBUGGER_CONNECTED__ || global.__HERMES_DEBUGGER_CONNECTED__);
+  // Method 2: Check React DevTools hook for debugger attachment
+  const rdtHook = global.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+  const rdtDebugger = !!(rdtHook && rdtHook._debuggerAttached);
+  // Method 3: Check if CDP is connected via the inspector agent
+  const inspectorConnected = !!(global.__inspectorGlobalObject || global.__inspector);
+
+  const wasDetected = _debuggerDetected;
+  _debuggerDetected = hermesDebugger || rdtDebugger || inspectorConnected;
+
+  if (_debuggerDetected && !wasDetected) {
+    _console.log('[RNDebugSDK] Debugger detected — SDK interception paused to avoid inspector conflicts. Use the ReactoRadar app to resume.');
+  } else if (!_debuggerDetected && wasDetected) {
+    _console.log('[RNDebugSDK] Debugger disconnected — SDK interception resumed.');
+  }
+}
+
+// Check periodically (every 3s) — lightweight, no performance impact
+_debuggerCheckInterval = setInterval(_checkDebuggerAttached, 3000);
+// Also check once immediately after a short delay (debugger may attach during startup)
+setTimeout(_checkDebuggerAttached, 1000);
+
+function _shouldIntercept() {
+  return _isSDKActive() && !_debuggerDetected;
+}
+
 // ─── WebSocket Factory ────────────────────────────────────────────────────────
 function makeChannel(port, name, onMessage) {
   let ws = null, queue = [], connected = false;
@@ -72,6 +115,21 @@ const mainCh    = makeChannel(PORTS.NETWORK_AND_CONSOLE, 'main', (msg) => {
     if (msg.action === 'set-network-capture') _networkCaptureEnabled = !!msg.enabled;
     if (msg.action === 'set-throttle') _throttleProfile = msg.profile || 'none';
     if (msg.action === 'set-stack-trace') _stackTraceEnabled = !!msg.enabled;
+    // Pause/Resume SDK interception (allows inspector to work)
+    if (msg.action === 'pause-sdk') {
+      _sdkPaused = true;
+      _console.log('[RNDebugSDK] SDK paused — inspector/debugger can now inspect the app freely.');
+      mainCh.send({ type: 'control', action: 'sdk-status', paused: true });
+    }
+    if (msg.action === 'resume-sdk') {
+      _sdkPaused = false;
+      _console.log('[RNDebugSDK] SDK resumed — interception re-enabled.');
+      mainCh.send({ type: 'control', action: 'sdk-status', paused: false });
+    }
+    // Query current status
+    if (msg.action === 'query-sdk-status') {
+      mainCh.send({ type: 'control', action: 'sdk-status', paused: _sdkPaused, debuggerDetected: _debuggerDetected });
+    }
   }
 });
 const reduxCh   = makeChannel(PORTS.REDUX,   'redux');
@@ -130,6 +188,9 @@ LEVELS.forEach(level => {
   _console[level] = console[level].bind(console);
   console[level] = (...args) => {
     _console[level](...args);
+    // Skip interception when SDK is paused or debugger is attached
+    // This prevents double-logging and message queue deadlocks with CDP
+    if (!_shouldIntercept()) return;
     const structuredArgs = args.map(serializeArg);
     const message = args.map(a => {
       if (typeof a === 'string') return a;
@@ -167,6 +228,10 @@ function _flattenHeaders(h) {
 // ─── Fetch Intercept ─────────────────────────────────────────────────────────
 const _fetch = global.fetch;
 global.fetch = async (input, init = {}) => {
+  // When SDK is paused or debugger is attached, pass through without interception
+  // This prevents racing with CDP's own Fetch.enable domain
+  if (!_shouldIntercept()) return _fetch(input, init);
+
   // Throttle: simulate slow network or offline
   const delay = THROTTLE_DELAYS[_throttleProfile] || 0;
   if (delay === -1) return Promise.reject(new TypeError('Network request failed (offline throttle)'));
@@ -236,24 +301,24 @@ global.fetch = async (input, init = {}) => {
         return _setHeader.apply(xhr, arguments);
       };
 
-      // Wrap send
-      const _send = xhr.send.bind(xhr);
-      xhr.send = function(body) {
-        if (_networkCaptureEnabled && !meta.sent) {
-          meta.sent = true;
-          let reqBody = null;
-          if (body != null) {
-            try { reqBody = typeof body === 'string' ? body : JSON.parse(JSON.stringify(body)); } catch { reqBody = String(body); }
-          }
-          mainCh.send({ type: 'network', phase: 'request', id: meta.id, url: meta.url,
-            method: meta.method, requestHeaders: meta.headers, requestBody: reqBody });
-        }
-        return _send.apply(xhr, arguments);
-      };
+       // Wrap send
+       const _send = xhr.send.bind(xhr);
+       xhr.send = function(body) {
+         if (_shouldIntercept() && _networkCaptureEnabled && !meta.sent) {
+           meta.sent = true;
+           let reqBody = null;
+           if (body != null) {
+             try { reqBody = typeof body === 'string' ? body : JSON.parse(JSON.stringify(body)); } catch { reqBody = String(body); }
+           }
+           mainCh.send({ type: 'network', phase: 'request', id: meta.id, url: meta.url,
+             method: meta.method, requestHeaders: meta.headers, requestBody: reqBody });
+         }
+         return _send.apply(xhr, arguments);
+       };
 
       // Listen for completion
-      xhr.addEventListener('readystatechange', function() {
-        if (xhr.readyState !== 4 || !meta.sent || !_networkCaptureEnabled) return;
+       xhr.addEventListener('readystatechange', function() {
+         if (xhr.readyState !== 4 || !meta.sent || !_shouldIntercept() || !_networkCaptureEnabled) return;
         try {
           const duration = Date.now() - meta.t0;
           if (xhr.status > 0) {
@@ -310,17 +375,8 @@ global.fetch = async (input, init = {}) => {
     _console.log('[RNDebugSDK] XHR constructor wrapped for network capture');
   }
 
-  // Wrap immediately if available
-  if (global.XMLHttpRequest) wrapXHR();
-
-  // Also wrap after RN polyfills set up (they replace global.XMLHttpRequest)
-  [0, 50, 200, 500].forEach(delay => {
-    setTimeout(() => {
-      if (global.XMLHttpRequest && !global.XMLHttpRequest.__dbgWrapped) {
-        wrapXHR();
-      }
-    }, delay);
-  });
+   // Wrap immediately if available
+   if (global.XMLHttpRequest) wrapXHR();
 })();
 
 // ─── Axios Interceptor (belt-and-suspenders with XHR patch) ──────────────────
@@ -334,8 +390,8 @@ setTimeout(() => {
     function addDbgInterceptors(instance) {
       if (!instance || !instance.interceptors || instance.__dbgInt) return;
       instance.__dbgInt = true;
-      instance.interceptors.request.use(config => {
-        if (!_networkCaptureEnabled) return config;
+       instance.interceptors.request.use(config => {
+         if (!_shouldIntercept() || !_networkCaptureEnabled) return config;
         const id = `ax-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
         config._dbgId = id;
         config._dbgT0 = Date.now();
@@ -348,9 +404,10 @@ setTimeout(() => {
         mainCh.send({ type:'network', phase:'request', id, url, method:(config.method||'GET').toUpperCase(), requestHeaders:h, requestBody:body });
         return config;
       }, e => Promise.reject(e));
-      instance.interceptors.response.use(resp => {
-        const c = resp.config || {};
-        if (!c._dbgId) return resp;
+       instance.interceptors.response.use(resp => {
+         if (!_shouldIntercept() || !_networkCaptureEnabled) return resp;
+         const c = resp.config || {};
+         if (!c._dbgId) return resp;
         const url = c.baseURL ? c.baseURL.replace(/\/+$/,'') + '/' + (c.url||'').replace(/^\/+/,'') : (c.url||'');
         const dur = c._dbgT0 ? Date.now() - c._dbgT0 : 0;
         const rh = {};
@@ -361,9 +418,10 @@ setTimeout(() => {
         mainCh.send({ type:'network', phase:'response', id:c._dbgId, url, method:(c.method||'GET').toUpperCase(),
           status:resp.status, statusText:resp.statusText, duration:dur, responseHeaders:rh, responseBody:body });
         return resp;
-      }, err => {
-        const c = err?.config || {};
-        if (c._dbgId) {
+       }, err => {
+         if (!_shouldIntercept() || !_networkCaptureEnabled) return Promise.reject(err);
+         const c = err?.config || {};
+         if (c._dbgId) {
           const url = c.baseURL ? c.baseURL.replace(/\/+$/,'') + '/' + (c.url||'').replace(/^\/+/,'') : (c.url||'');
           const dur = c._dbgT0 ? Date.now() - c._dbgT0 : 0;
           const r = err?.response;

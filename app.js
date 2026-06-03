@@ -205,15 +205,19 @@ if (window.electronAPI) {
   window.electronAPI.on('ports', ports => { state.ports = ports; });
 
   window.electronAPI.on('cdp-targets', targets => {
-    const hasCDP = targets?.length > 0;
-    $('btnCDP').textContent = hasCDP
-      ? `JS Debugger (${targets.length}) ↗`
-      : 'JS Debugger ↗';
-    $('btnCDP').style.opacity = hasCDP ? '1' : '0.5';
-    if (hasCDP) {
-      $('btnCDP').onclick = () => window.electronAPI.openCDPTarget(targets[0].webSocketDebuggerUrl);
+    state.cdpTargets = targets;
+    const btn = $('btnCDP');
+    if (btn) {
+      const hasCDP = targets?.length > 0;
+      const port = getStoredMetroPort();
+      btn.textContent = hasCDP
+        ? `JS Debugger (:${port}) [${targets.length}] ↗`
+        : `JS Debugger (:${port}) ↗`;
+      btn.style.opacity = hasCDP ? '1' : '0.5';
+      if (hasCDP) {
+        btn.onclick = () => window.electronAPI.openCDPTarget(targets[0].webSocketDebuggerUrl);
+      }
     }
-
   });
 
   window.electronAPI.on('redux-event', handleReduxEvent);
@@ -2149,9 +2153,9 @@ function initReactPanel() {
       <div class="react-connect-hint" id="reactHint">
         <div class="icon" style="font-size:40px;opacity:.2">⚛️</div>
         <div class="label">React DevTools</div>
-        <div class="hint">Launches as a separate window connected to your app</div>
-        <div class="hint">React Native auto-connects on port <code>8097</code> in dev mode</div>
-        <button class="btn-launch" id="btnReactDT">Open React DevTools ↗</button>
+        <div class="hint">Opens as a separate window connected to your app via port 8097</div>
+        <div class="hint" style="margin-top:8px;color:var(--yellow)">Note: The RN inspector overlay won't work while React DevTools is connected. Close the DevTools window to use the built-in inspector.</div>
+        <button class="btn-launch" id="btnReactDT" style="margin-top:12px">Open React DevTools ↗</button>
       </div>
     </div>`;
 
@@ -2181,6 +2185,12 @@ function getStoredAppName() {
 }
 function setStoredAppName(n) {
   try { localStorage.setItem('rn-debug-appname', n); } catch {}
+}
+function getStoredMetroPort() {
+  try { return parseInt(localStorage.getItem('rn-debug-metro-port')) || 8081; } catch { return 8081; }
+}
+function setStoredMetroPort(p) {
+  try { localStorage.setItem('rn-debug-metro-port', String(p)); } catch {}
 }
 function applyAppName(name) {
   const logo = document.querySelector('.logo');
@@ -2280,10 +2290,11 @@ function initSettingsPanel() {
             </div>
           </div>
           <div class="settings-row">
-            <div>
-              <div class="settings-label">Metro Bundler</div>
-              <div class="settings-hint">CDP target discovery on :8081</div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <div class="settings-label">Metro Bundler Port</div>
+              <div class="settings-hint">Port for CDP target discovery (default: 8081)</div>
             </div>
+            <input id="metroPortInput" type="number" class="net-search-input" style="width:70px;text-align:center" value="${getStoredMetroPort()}" />
           </div>
         </div>
         <div class="settings-section">
@@ -2334,6 +2345,7 @@ function initSettingsPanel() {
             <div class="about-links" style="display:flex;gap:16px;justify-content:center">
               <span class="about-link" id="linkGithub">GitHub</span>
               <span class="about-link" id="linkDocs">Documentation</span>
+              <span class="about-link" id="linkLinkedIn">Developer LinkedIn</span>
             </div>
           </div>
         </div>
@@ -2383,6 +2395,9 @@ function initSettingsPanel() {
   $('linkDocs')?.addEventListener('click', () => {
     window.electronAPI?.openExternal('https://github.com/sharanagouda/react-native-debugger#readme');
   });
+  $('linkLinkedIn')?.addEventListener('click', () => {
+    window.electronAPI?.openExternal('https://www.linkedin.com/in/sharanagoudamk/');
+  });
 
   // App name
   $('appNameInput').addEventListener('change', (e) => {
@@ -2394,6 +2409,15 @@ function initSettingsPanel() {
     setStoredAppName('ReactoRadar');
     $('appNameInput').value = 'ReactoRadar';
     applyAppName('ReactoRadar');
+  });
+
+  // Metro Port
+  $('metroPortInput')?.addEventListener('change', (e) => {
+    let port = parseInt(e.target.value.trim());
+    if (isNaN(port) || port < 1024 || port > 65535) port = 8081;
+    e.target.value = port;
+    setStoredMetroPort(port);
+    window.electronAPI?.setMetroPort(port);
   });
 
   // Font size controls
@@ -2415,6 +2439,9 @@ function initSettingsPanel() {
 applyTheme(getStoredTheme());
 applyFontSize(getStoredFontSize());
 applyAppName(getStoredAppName());
+
+// Send stored metro port to backend
+window.electronAPI?.setMetroPort(getStoredMetroPort());
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SOURCES PANEL — CDP-based file browser + breakpoints
@@ -2667,7 +2694,8 @@ async function loadSourceFile(filepath) {
   // Strategy 2: Fetch from Metro
   if (!source) {
     try {
-      const resp = await fetch(`http://localhost:8081/${filepath}?platform=ios&dev=true`);
+      const port = getStoredMetroPort();
+      const resp = await fetch(`http://localhost:${port}/${filepath}?platform=ios&dev=true`);
       if (resp.ok) source = await resp.text();
     } catch {}
   }

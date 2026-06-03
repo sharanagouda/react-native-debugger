@@ -55,7 +55,8 @@ app.whenReady().then(async () => {
   // Check for updates (non-blocking)
   checkForUpdates();
   startBridgeServers();
-  startReactDevToolsServer();
+  // React DevTools relay NOT started by default — it blocks RN's built-in inspector.
+  // Started on-demand when user clicks React tab or Cmd+R.
   setupMetroCDPProxy();
   setupIPC();
   buildMenu();
@@ -317,6 +318,8 @@ function setupIPC() {
   });
 
   ipcMain.on('open-react-devtools', () => {
+    // Start the relay server if not already running
+    if (!reactDTServer) startReactDevToolsServer();
     // Open standalone react-devtools window
     const rdtWin = new BrowserWindow({
       width: 1100,
@@ -331,6 +334,12 @@ function setupIPC() {
   });
 
   // clear-all is handled by renderer via clear-all-ui IPC from menu
+
+  ipcMain.on('set-metro-port', (_, port) => {
+    PORTS.METRO = port;
+    fetchCDPTargets();
+    mainWindow?.webContents.send('ports', PORTS);
+  });
 
   ipcMain.on('set-network-capture', (_, enabled) => {
     // Broadcast to connected RN apps so they can stop/start intercepting
@@ -391,7 +400,7 @@ function setupIPC() {
         // Also try to detect from Metro's /json endpoint
         try {
           const result = require('child_process').execSync(
-            "lsof -i :8081 -t 2>/dev/null | head -1 | xargs -I{} lsof -p {} -Fn 2>/dev/null | grep '^n/' | grep 'node_modules' | head -1 | sed 's|^n||;s|/node_modules.*||'",
+            `lsof -i :${PORTS.METRO} -t 2>/dev/null | head -1 | xargs -I{} lsof -p {} -Fn 2>/dev/null | grep '^n/' | grep 'node_modules' | head -1 | sed 's|^n||;s|/node_modules.*||'`,
             { encoding: 'utf8', timeout: 3000 }
           ).trim();
           if (result && fs.existsSync(result)) candidates.unshift(result);
