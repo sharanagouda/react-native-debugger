@@ -145,6 +145,32 @@ npx reactoradar remove
 - Deep equality comparison (no false positives from reference changes)
 - Time travel with ◀ ▶ navigation
 
+### Redux Setup
+
+`npx reactoradar setup` auto-detects Redux and patches your store. If it can't auto-patch, add manually:
+
+**Redux Toolkit (configureStore):**
+```js
+// In your store file (e.g. src/store/store.ts)
+import { configureStore } from '@reduxjs/toolkit';
+
+export const store = configureStore({
+  reducer: rootReducer,
+  middleware: (getDefaultMiddleware) =>
+    __DEV__
+      ? getDefaultMiddleware().concat(require('../debug/RNDebugSDK').reduxMiddleware)
+      : getDefaultMiddleware(),
+});
+```
+
+**Legacy Redux (createStore):**
+```js
+import { reduxEnhancer } from '../debug/RNDebugSDK';
+const store = createStore(reducer, __DEV__ ? reduxEnhancer : undefined);
+```
+
+> **Note:** The import path is relative from your store file to `src/debug/RNDebugSDK`. Adjust if your store is in a different directory. Run `npx reactoradar setup` to auto-detect the correct path.
+
 ## Themes
 
 9 built-in themes: **Dark** (default), **Light**, **Monokai**, **Dracula**, **Solarized Dark**, **Solarized Light**, **Nord**, **GitHub Dark**, **One Dark**

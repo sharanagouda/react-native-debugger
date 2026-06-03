@@ -242,7 +242,38 @@ ${SDK_MARKER_END}
        if (!relSDK.startsWith('.')) relSDK = './' + relSDK;
 
        if (storeContent.includes('RNDebugSDK')) {
-         log('Redux store already has RNDebugSDK wired — skipping');
+         // Check if the require path is correct — fix stale/wrong paths from older setup versions
+         const wrongPathRe = /require\(['"]([^'"]*RNDebugSDK[^'"]*)['"]\)/g;
+         let hasWrongPath = false;
+         let fixedContent = storeContent;
+         let match;
+         while ((match = wrongPathRe.exec(storeContent)) !== null) {
+           const existingPath = match[1];
+           // Normalize: strip .js extension for comparison
+           const normalizedExisting = existingPath.replace(/\.js$/, '');
+           const normalizedExpected = relSDK.replace(/\.js$/, '');
+           if (normalizedExisting !== normalizedExpected) {
+             hasWrongPath = true;
+             fixedContent = fixedContent.replace(match[0], `require('${relSDK}')`);
+           }
+         }
+         // Also fix import statements
+         const wrongImportRe = /from\s+['"]([^'"]*RNDebugSDK[^'"]*)['"]/g;
+         while ((match = wrongImportRe.exec(storeContent)) !== null) {
+           const existingPath = match[1];
+           const normalizedExisting = existingPath.replace(/\.js$/, '');
+           const normalizedExpected = relSDK.replace(/\.js$/, '');
+           if (normalizedExisting !== normalizedExpected) {
+             hasWrongPath = true;
+             fixedContent = fixedContent.replace(match[0], `from '${relSDK}'`);
+           }
+         }
+         if (hasWrongPath) {
+           fs.writeFileSync(storePath, fixedContent);
+           log('Fixed stale SDK path in', C.bold + storeFile + C.reset, '→', C.cyan + relSDK + C.reset);
+         } else {
+           log('Redux store already has RNDebugSDK wired correctly — skipping');
+         }
        } else if (storeContent.includes('configureStore')) {
          // RTK configureStore
          // Try to add middleware to configureStore
