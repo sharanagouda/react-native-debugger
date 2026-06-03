@@ -209,7 +209,7 @@ if (window.electronAPI) {
     const btn = $('btnCDP');
     if (btn) {
       const hasCDP = targets?.length > 0;
-      const port = getStoredMetroPort();
+      const port = state.ports?.METRO || getStoredMetroPort();
       btn.textContent = hasCDP
         ? `JS Debugger (:${port}) [${targets.length}] ↗`
         : `JS Debugger (:${port}) ↗`;
@@ -268,21 +268,7 @@ if (window.electronAPI) {
   window.electronAPI.on('update-available', ({ current, latest }) => {
     // Show in settings only, not as a banner
     state._updateAvailable = { current, latest };
-    const el = $('aboutVersion');
-    if (el) el.innerHTML = `v${current} <span style="color:var(--green);font-size:10px;margin-left:6px">v${latest} available</span>`;
-    // Add update button in settings if not already there
-    if (!$('updateBtn')) {
-      const aboutEl = document.querySelector('.settings-about');
-      if (aboutEl) {
-        const btn = document.createElement('div');
-        btn.style.cssText = 'margin-top:10px';
-        btn.innerHTML = '<button id="updateBtn" class="tb-btn primary" style="font-size:11px">Download v' + latest + '</button>';
-        aboutEl.appendChild(btn);
-        $('updateBtn')?.addEventListener('click', () => {
-          window.electronAPI?.openExternal('https://github.com/sharanagouda/react-native-debugger/releases');
-        });
-      }
-    }
+    _applyUpdateBanner();
   });
 
   window.electronAPI.on('trigger-open-cdp', () => {
@@ -299,6 +285,31 @@ if (window.electronAPI) {
 }
 
 // ─── Device Connection Status (inline in titlebar) ───────────────────────────
+// Reusable — called from IPC handler AND from initSettingsPanel
+function _applyUpdateBanner() {
+  const info = state._updateAvailable;
+  if (!info) return;
+  const { current, latest } = info;
+  const el = $('aboutVersion');
+  if (el && !el.dataset.updateApplied) {
+    el.innerHTML = `v${current} <span style="color:var(--green);font-size:10px;margin-left:6px">v${latest} available</span>`;
+    el.dataset.updateApplied = '1';
+  }
+  // Add update button in settings if not already there
+  if (!$('updateBtn')) {
+    const aboutEl = document.querySelector('.settings-about');
+    if (aboutEl) {
+      const btn = document.createElement('div');
+      btn.style.cssText = 'margin-top:10px';
+      btn.innerHTML = '<button id="updateBtn" class="tb-btn primary" style="font-size:11px;padding:6px 16px">Download v' + latest + '</button>';
+      aboutEl.appendChild(btn);
+      $('updateBtn')?.addEventListener('click', () => {
+        window.electronAPI?.openExternal('https://github.com/sharanagouda/react-native-debugger/releases');
+      });
+    }
+  }
+}
+
 function updateDeviceBanner(service, connected) {
   state.connections[service] = connected;
   const el = $('deviceStatus');
@@ -1273,9 +1284,13 @@ function renderNetwork() {
   rows.appendChild(frag);
 }
 
+function _isHttpError(r) {
+  return r.phase === 'error' || (r.status && r.status >= 400);
+}
+
 function buildNetRow(r, wfMin, wfRange) {
   const row = document.createElement('div');
-  row.className = 'net-row' + (r.id === state.network.selectedId ? ' selected' : '') + (r.phase === 'error' ? ' error' : '');
+  row.className = 'net-row' + (r.id === state.network.selectedId ? ' selected' : '') + (_isHttpError(r) ? ' error' : '');
   row.dataset.id = r.id;
 
   const urlObj = tryURL(r.url);
@@ -1291,7 +1306,9 @@ function buildNetRow(r, wfMin, wfRange) {
   const method = r.method || '?';
   const mClass = ['GET','POST','PUT','PATCH','DELETE'].includes(method) ? `m-${method}` : 'm-other';
   const fullPath = urlObj ? urlObj.pathname + urlObj.search : r.url || '';
-  nameCell.innerHTML = `<span class="method-badge ${mClass}">${method}</span> <span class="net-path" title="${esc(r.url)}">${esc(fullPath)}</span><span class="net-host">${esc(host)}</span>`;
+  const isErr = _isHttpError(r);
+  const pathCls = isErr ? ' net-path-error' : '';
+  nameCell.innerHTML = `<span class="method-badge ${mClass}">${method}</span> <span class="net-path${pathCls}" title="${esc(r.url)}">${esc(fullPath)}</span><span class="net-host">${esc(host)}</span>`;
   row.appendChild(nameCell);
 
   // Status
@@ -1301,7 +1318,13 @@ function buildNetRow(r, wfMin, wfRange) {
   statusCell.style.width = NET_COLS[1].width + 'px';
   let statusStr = '...', sCls = 's-pending';
   if (r.phase === 'error') { statusStr = 'ERR'; sCls = 's-err'; }
-  else if (r.status) { statusStr = String(r.status); sCls = `s-${Math.floor(r.status/100)}`; }
+  else if (r.status) {
+    statusStr = String(r.status);
+    const group = Math.floor(r.status / 100);
+    // 1xx info, 2xx success, 3xx redirect, 4xx client error, 5xx server error
+    if (group >= 4) sCls = 's-err';
+    else sCls = `s-${group}`;
+  }
   statusCell.className += ` ${sCls}`;
   statusCell.textContent = statusStr;
   row.appendChild(statusCell);
@@ -1350,6 +1373,7 @@ function buildNetRow(r, wfMin, wfRange) {
     const width = Math.max(2, ((r.duration || 50) / wfRange) * 100);
     let barCls = 'pending';
     if (r.phase === 'error') barCls = 'err';
+    else if (r.status && r.status >= 400) barCls = 'err';
     else if (r.status) barCls = `s${Math.floor(r.status/100)}`;
     wfCell.innerHTML = `<div class="wf-bar ${barCls}" style="left:${left}%;width:${width}%"></div>`;
   }
@@ -1416,8 +1440,12 @@ function renderNetDetailTabs(r) {
 }
 
 function renderNetDetailContent(r) {
-  const body = $('netDetailContent');
+  let body = $('netDetailContent');
   if (!body) return;
+  // Clone-replace to remove all stale event listeners (prevents contextmenu leak)
+  const fresh = body.cloneNode(false);
+  body.parentNode.replaceChild(fresh, body);
+  body = fresh;
   const tab = r._tab || 'headers';
 
   if (tab === 'headers') {
@@ -1436,7 +1464,7 @@ function renderNetDetailContent(r) {
       <div class="kv-grid">
         <span class="kv-key">Request URL</span><span class="kv-val">${esc(r.url)}</span>
         <span class="kv-key">Method</span><span class="kv-val">${esc(r.method)}</span>
-        <span class="kv-key">Status</span><span class="kv-val ${r.status ? 's-' + Math.floor(r.status/100) : 's-pending'}">${r.status || 'Pending'} ${r.statusText || ''}</span>
+        <span class="kv-key">Status</span><span class="kv-val ${r.phase === 'error' ? 's-err' : r.status ? (r.status >= 400 ? 's-err' : 's-' + Math.floor(r.status/100)) : 's-pending'}">${r.phase === 'error' ? (r.status || 'ERR') : (r.status || 'Pending')} ${r.statusText || (r.phase === 'error' ? r.error || 'Network Error' : '')}</span>
       </div>
       ${renderH('Response Headers', rsH)}
       ${renderH('Request Headers', rqH)}`;
@@ -1460,16 +1488,27 @@ function renderNetDetailContent(r) {
       }
     }
   } else if (tab === 'preview') {
-    if (r.phase === 'error') { body.innerHTML = `<span style="color:var(--red)">${esc(r.error || 'Request failed')}</span>`; return; }
+    const isErrStatus = _isHttpError(r);
+    if (r.phase === 'error' && !r.responseBody) { body.innerHTML = `<span style="color:var(--red)">${esc(r.error || 'Request failed')}</span>`; return; }
     if (!r.responseBody && r.phase !== 'response') { body.innerHTML = '<span style="color:var(--text-dim)">Pending...</span>'; return; }
     // Render as collapsible JSON tree with right-click copy
     const val = r.responseBody;
     let treeData = val;
     if (typeof val === 'string') {
-      try { treeData = JSON.parse(val); } catch { body.textContent = val; return; }
+      try { treeData = JSON.parse(val); } catch {
+        body.innerHTML = `<span style="color:${isErrStatus ? 'var(--red)' : 'inherit'}">${esc(val)}</span>`;
+        return;
+      }
     }
     if (treeData && typeof treeData === 'object') {
       body.innerHTML = '';
+      // Show error status banner above the response body
+      if (isErrStatus) {
+        const errBanner = document.createElement('div');
+        errBanner.style.cssText = 'color:var(--red);font-weight:600;padding:4px 0 8px;font-size:11px;border-bottom:1px solid rgba(255,94,114,.15);margin-bottom:8px';
+        errBanner.textContent = `${r.status || 'ERR'} ${r.statusText || r.error || 'Error'}`;
+        body.appendChild(errBanner);
+      }
       body.appendChild(createTreeNode(null, treeData, false));
       // Right-click on preview to copy the whole object or clicked node value
       body.addEventListener('contextmenu', (e) => {
@@ -1477,12 +1516,27 @@ function renderNetDetailContent(r) {
         showPreviewCopyMenu(e, treeData);
       });
     } else {
-      body.innerHTML = '<span style="color:var(--text-dim)">No preview available</span>';
+      body.innerHTML = isErrStatus
+        ? `<span style="color:var(--red)">${esc(String(r.responseBody))}</span>`
+        : '<span style="color:var(--text-dim)">No preview available</span>';
     }
   } else if (tab === 'response') {
-    if (r.phase === 'error') { body.innerHTML = `<span style="color:var(--red)">${esc(r.error || 'Request failed')}</span>`; return; }
+    const isErrStatus = _isHttpError(r);
+    if (r.phase === 'error' && !r.responseBody) { body.innerHTML = `<span style="color:var(--red)">${esc(r.error || 'Request failed')}</span>`; return; }
     if (!r.responseBody && r.phase !== 'response') { body.innerHTML = '<span style="color:var(--text-dim)">Pending...</span>'; return; }
-    body.innerHTML = renderJSON(r.responseBody);
+    if (isErrStatus) {
+      const errBanner = document.createElement('div');
+      errBanner.style.cssText = 'color:var(--red);font-weight:600;padding:4px 0 8px;font-size:11px;border-bottom:1px solid rgba(255,94,114,.15);margin-bottom:8px';
+      errBanner.textContent = `${r.status || 'ERR'} ${r.statusText || r.error || 'Error'}`;
+      body.innerHTML = '';
+      body.appendChild(errBanner);
+      const raw = document.createElement('div');
+      raw.style.color = 'var(--red)';
+      raw.innerHTML = renderJSON(r.responseBody);
+      body.appendChild(raw);
+    } else {
+      body.innerHTML = renderJSON(r.responseBody);
+    }
   }
 }
 
@@ -2433,6 +2487,9 @@ function initSettingsPanel() {
     setStoredFontSize(size);
     applyFontSize(size);
   });
+
+  // Apply update banner if update info arrived before settings panel was created
+  _applyUpdateBanner();
 }
 
 // Apply saved theme + font size + app name on load

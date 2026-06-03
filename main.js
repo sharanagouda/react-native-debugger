@@ -107,6 +107,18 @@ async function createMainWindow() {
 }
 
 // ─── Update Checker ──────────────────────────────────────────────────────────
+function _semverCompare(a, b) {
+  // Returns 1 if a > b, -1 if a < b, 0 if equal
+  const pa = (a || '').split('.').map(Number);
+  const pb = (b || '').split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const va = pa[i] || 0, vb = pb[i] || 0;
+    if (va > vb) return 1;
+    if (va < vb) return -1;
+  }
+  return 0;
+}
+
 function checkForUpdates() {
   const currentVersion = require('./package.json').version;
   https.get('https://registry.npmjs.org/reactoradar/latest', (res) => {
@@ -115,9 +127,16 @@ function checkForUpdates() {
     res.on('end', () => {
       try {
         const latest = JSON.parse(data).version;
-        if (latest && latest !== currentVersion) {
-          // Notify the renderer to show an update banner
-          mainWindow?.webContents.send('update-available', { current: currentVersion, latest });
+        if (latest && _semverCompare(latest, currentVersion) > 0) {
+          // Send with retries to ensure renderer catches it after did-finish-load
+          const payload = { current: currentVersion, latest };
+          [500, 2000, 5000].forEach(delay => {
+            setTimeout(() => {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('update-available', payload);
+              }
+            }, delay);
+          });
           console.log(`[Update] New version available: ${latest} (current: ${currentVersion})`);
         }
       } catch {}
@@ -336,7 +355,9 @@ function setupIPC() {
   // clear-all is handled by renderer via clear-all-ui IPC from menu
 
   ipcMain.on('set-metro-port', (_, port) => {
-    PORTS.METRO = port;
+    const p = parseInt(port);
+    if (isNaN(p) || p < 1024 || p > 65535) return;
+    PORTS.METRO = p;
     fetchCDPTargets();
     mainWindow?.webContents.send('ports', PORTS);
   });

@@ -741,7 +741,11 @@ body {
 }
 .net-row:hover { background: var(--bg3); }
 .net-row.selected { background: var(--bg4); }
-.net-row.error { background: rgba(255,94,114,.04); }
+.net-row.error { background: rgba(255,94,114,.06); border-bottom-color: rgba(255,94,114,.10); }
+.net-row.error:hover { background: rgba(255,94,114,.10); }
+.net-row.error .net-path { color: var(--red); }
+.net-row.error .net-host { color: rgba(255,94,114,.6); }
+.net-path-error { color: var(--red) !important; }
 .net-cell {
   padding: 6px 8px;
   overflow: hidden;
@@ -757,12 +761,13 @@ body {
 .net-cell-name .method-badge { flex-shrink: 0; vertical-align: middle; }
 
 .net-status { font-weight: 700; }
-.s-2 { color: var(--green); }
-.s-3 { color: var(--yellow); }
-.s-4 { color: var(--orange); }
-.s-5 { color: var(--red); }
+.s-1 { color: var(--text-mid); }   /* 1xx informational */
+.s-2 { color: var(--green); }      /* 2xx success */
+.s-3 { color: var(--yellow); }     /* 3xx redirect */
+.s-4 { color: var(--red); }        /* 4xx client error */
+.s-5 { color: var(--red); }        /* 5xx server error */
 .s-pending { color: var(--text-dim); }
-.s-err { color: var(--red); }
+.s-err { color: var(--red); font-weight: 700; }
 
 .net-type { color: var(--text-dim); font-size: 10px; }
 .net-initiator { color: var(--text-dim); font-size: 10px; }
