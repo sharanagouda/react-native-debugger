@@ -166,10 +166,18 @@ async function install(projectDir) {
   const sdkDestDir = path.join(projectDir, 'src', 'debug');
   const sdkDest = path.join(sdkDestDir, 'RNDebugSDK.js');
 
-  if (!dirExists(path.join(projectDir, 'src'))) {
-    fs.mkdirSync(path.join(projectDir, 'src'), { recursive: true });
+  if (!fileExists(sdkSrc)) {
+    err('SDK source file not found at: ' + sdkSrc);
+    err('This may be a corrupted installation. Try: npm cache clean --force && npx reactoradar@latest setup');
+    process.exit(1);
   }
-  fs.mkdirSync(sdkDestDir, { recursive: true });
+
+  try {
+    fs.mkdirSync(sdkDestDir, { recursive: true });
+  } catch (e) {
+    err('Failed to create directory ' + sdkDestDir + ': ' + e.message);
+    process.exit(1);
+  }
 
   // Read SDK, patch HOST
   let sdkContent = fs.readFileSync(sdkSrc, 'utf8');
@@ -177,7 +185,18 @@ async function install(projectDir) {
     /const HOST = '[^']+';/,
     `const HOST = '${host}';`
   );
-  fs.writeFileSync(sdkDest, sdkContent);
+  try {
+    fs.writeFileSync(sdkDest, sdkContent);
+  } catch (e) {
+    err('Failed to write SDK file to ' + sdkDest + ': ' + e.message);
+    process.exit(1);
+  }
+
+  // Verify the file was actually written
+  if (!fileExists(sdkDest)) {
+    err('SDK file was not created at ' + sdkDest + ' — check directory permissions');
+    process.exit(1);
+  }
   log('Copied RNDebugSDK.js →', C.dim + 'src/debug/RNDebugSDK.js' + C.reset);
 
   // 4. Patch entry file
@@ -207,56 +226,60 @@ ${SDK_MARKER_END}
     }
   }
 
-  // 5. Detect and wire Redux
-  info('Checking for Redux...');
-  const hasRedux = allDeps['@reduxjs/toolkit'] || allDeps['redux'];
-  if (hasRedux) {
-    const storeFile = findStoreFile(projectDir);
-    if (storeFile) {
-      const storePath = path.join(projectDir, storeFile);
-      const storeContent = fs.readFileSync(storePath, 'utf8');
+   // 5. Detect and wire Redux
+   info('Checking for Redux...');
+   const hasRedux = allDeps['@reduxjs/toolkit'] || allDeps['redux'];
+   if (hasRedux) {
+     const storeFile = findStoreFile(projectDir);
+     if (storeFile) {
+       const storePath = path.join(projectDir, storeFile);
+       const storeContent = fs.readFileSync(storePath, 'utf8');
 
-      if (storeContent.includes('RNDebugSDK')) {
-        log('Redux store already has RNDebugSDK wired — skipping');
-      } else if (storeContent.includes('configureStore')) {
-        // RTK configureStore
-        const patchedStore = `${SDK_MARKER_START}\nimport { reduxMiddleware } from '../debug/RNDebugSDK';\n${SDK_MARKER_END}\n` + storeContent;
+       // Compute relative path from store file to SDK
+       const storeDir = path.dirname(path.join(projectDir, storeFile));
+       let relSDK = path.relative(storeDir, path.join(projectDir, 'src', 'debug', 'RNDebugSDK'))
+         .replace(/\\/g, '/'); // Windows compat
+       if (!relSDK.startsWith('.')) relSDK = './' + relSDK;
 
-        // Try to add middleware to configureStore
-        if (storeContent.includes('middleware:') || storeContent.includes('middleware :')) {
-          warn('Redux store found at', C.bold + storeFile + C.reset, '— has custom middleware');
-          console.log(C.dim + '    Add manually to your middleware:' + C.reset);
-          console.log(C.dim + '      import { reduxMiddleware } from \'./src/debug/RNDebugSDK\';' + C.reset);
-          console.log(C.dim + '      middleware: (getDefault) => __DEV__' + C.reset);
-          console.log(C.dim + '        ? getDefault().concat(reduxMiddleware)' + C.reset);
-          console.log(C.dim + '        : getDefault(),' + C.reset);
-        } else {
-          // Add middleware field to configureStore
-          const patched = storeContent.replace(
-            /(configureStore\s*\(\s*\{)/,
-            `$1\n  middleware: (getDefaultMiddleware) =>\n    __DEV__\n      ? getDefaultMiddleware().concat(require('./src/debug/RNDebugSDK').reduxMiddleware)\n      : getDefaultMiddleware(),`
-          );
-          if (patched !== storeContent) {
-            fs.writeFileSync(storePath, patched);
-            log('Patched', C.bold + storeFile + C.reset, '— Redux middleware wired');
-          } else {
-            warn('Could not auto-patch', storeFile, '— wire Redux manually');
-          }
-        }
-      } else if (storeContent.includes('createStore')) {
-        warn('Legacy createStore found at', C.bold + storeFile + C.reset);
-        console.log(C.dim + '    Add manually:' + C.reset);
-        console.log(C.dim + '      import { reduxEnhancer } from \'./src/debug/RNDebugSDK\';' + C.reset);
-        console.log(C.dim + '      const store = createStore(reducer, __DEV__ ? reduxEnhancer : undefined);' + C.reset);
-      }
-    } else {
-      warn('Redux detected but store file not found automatically');
-      console.log(C.dim + '    Add to your store setup:' + C.reset);
-      console.log(C.dim + '      import { reduxMiddleware } from \'./src/debug/RNDebugSDK\';' + C.reset);
-    }
-  } else {
-    log('No Redux detected — skipping');
-  }
+       if (storeContent.includes('RNDebugSDK')) {
+         log('Redux store already has RNDebugSDK wired — skipping');
+       } else if (storeContent.includes('configureStore')) {
+         // RTK configureStore
+         // Try to add middleware to configureStore
+         if (storeContent.includes('middleware:') || storeContent.includes('middleware :')) {
+           warn('Redux store found at', C.bold + storeFile + C.reset, '— has custom middleware');
+           console.log(C.dim + '    Add manually to your middleware:' + C.reset);
+           console.log(C.dim + `      import { reduxMiddleware } from '${relSDK}';` + C.reset);
+           console.log(C.dim + '      middleware: (getDefault) => __DEV__' + C.reset);
+           console.log(C.dim + '        ? getDefault().concat(reduxMiddleware)' + C.reset);
+           console.log(C.dim + '        : getDefault(),' + C.reset);
+         } else {
+           // Add middleware field to configureStore
+           const patched = storeContent.replace(
+             /(configureStore\s*\(\s*\{)/,
+             `$1\n  middleware: (getDefaultMiddleware) =>\n    __DEV__\n      ? getDefaultMiddleware().concat(require('${relSDK}').reduxMiddleware)\n      : getDefaultMiddleware(),`
+           );
+           if (patched !== storeContent) {
+             fs.writeFileSync(storePath, patched);
+             log('Patched', C.bold + storeFile + C.reset, '— Redux middleware wired');
+           } else {
+             warn('Could not auto-patch', storeFile, '— wire Redux manually');
+           }
+         }
+       } else if (storeContent.includes('createStore')) {
+         warn('Legacy createStore found at', C.bold + storeFile + C.reset);
+         console.log(C.dim + '    Add manually:' + C.reset);
+         console.log(C.dim + `      import { reduxEnhancer } from '${relSDK}';` + C.reset);
+         console.log(C.dim + '      const store = createStore(reducer, __DEV__ ? reduxEnhancer : undefined);' + C.reset);
+       }
+     } else {
+       warn('Redux detected but store file not found automatically');
+       console.log(C.dim + '    Add to your store setup:' + C.reset);
+       console.log(C.dim + '      import { reduxMiddleware } from \'./src/debug/RNDebugSDK\';' + C.reset);
+     }
+   } else {
+     log('No Redux detected — skipping');
+   }
 
   // 6. adb reverse for Android
   if (platform.hasAndroidEmu || platform.hasAndroidDevice) {

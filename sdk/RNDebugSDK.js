@@ -15,7 +15,7 @@
  */
 
 if (!__DEV__) {
-  module.exports = { reduxEnhancer: x => x, watchAsyncStorage: () => {} };
+  module.exports = { reduxEnhancer: x => x, reduxMiddleware: () => next => action => next(action), watchAsyncStorage: () => {} };
 } else {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
