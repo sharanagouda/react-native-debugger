@@ -94,15 +94,46 @@ function highlight(html, term) {
 }
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
+function _getPanelOrder() {
+  const order = getTabOrder();
+  // Always include settings at the end
+  if (!order.includes('settings')) order.push('settings');
+  return order;
+}
+
+function switchPanel(panel) {
+  if (!$(`panel-${panel}`)) return;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const btn = document.querySelector(`.nav-btn[data-panel="${panel}"]`);
+  if (btn) btn.classList.add('active');
+  $(`panel-${panel}`).classList.add('active');
+  state.activePanel = panel;
+}
+
 document.querySelectorAll('.nav-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const panel = btn.dataset.panel;
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    $(`panel-${panel}`).classList.add('active');
-    state.activePanel = panel;
-  });
+  btn.addEventListener('click', () => switchPanel(btn.dataset.panel));
+});
+
+// Keyboard shortcuts: Cmd+1–9 for panel switching, Cmd+K clear
+document.addEventListener('keydown', (e) => {
+  if (!(e.metaKey || e.ctrlKey)) return;
+  const num = parseInt(e.key);
+  const panelOrder = _getPanelOrder();
+  if (num >= 1 && num <= panelOrder.length) {
+    e.preventDefault();
+    const vis = getTabVisibility();
+    const target = panelOrder[num - 1];
+    if (vis[target] !== false) switchPanel(target);
+  }
+  if (e.key === 'k') {
+    e.preventDefault();
+    clearActiveTab();
+  }
+  if (e.key === 's') {
+    e.preventDefault();
+    takeScreenshot();
+  }
 });
 
 // Global filter removed — each panel has its own search input
@@ -193,10 +224,24 @@ function clearAll() {
 }
 
 // ─── CDP Button ───────────────────────────────────────────────────────────────
-$('btnCDP').addEventListener('click', () => {
+$('btnCDP')?.addEventListener('click', () => {
   // Tell main process to open the CDP DevTools window with the best available target
   window.electronAPI?.openCDPTarget(null); // null = use latest known target
 });
+
+// ─── Screenshot Button ────────────────────────────────────────────────────────
+$('btnScreenshot')?.addEventListener('click', takeScreenshot);
+
+function takeScreenshot() {
+  const btn = $('btnScreenshot');
+  if (!btn) return;
+  const origText = btn.innerHTML;
+  btn.innerHTML = '<span style="opacity:0.6">Saving...</span>';
+  // Use Electron's native capturePage — always works, no DOM rendering issues
+  window.electronAPI?.captureScreenshot();
+  btn.innerHTML = '<span style="color:var(--green)">Saved!</span>';
+  setTimeout(() => { btn.innerHTML = origText; }, 2000);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IPC from Main
@@ -273,9 +318,13 @@ if (window.electronAPI) {
     document.querySelectorAll('#aboutVersion').forEach(el => el.textContent = 'v' + version);
   });
 
-  window.electronAPI.on('update-available', ({ current, latest }) => {
-    // Show in settings only, not as a banner
-    state._updateAvailable = { current, latest };
+  window.electronAPI.on('update-available', ({ current, latest, autoUpdate }) => {
+    state._updateAvailable = { current, latest, autoUpdate };
+    _applyUpdateBanner();
+  });
+
+  window.electronAPI.on('update-downloaded', ({ version }) => {
+    state._updateDownloaded = version;
     _applyUpdateBanner();
   });
 
@@ -297,23 +346,47 @@ if (window.electronAPI) {
 function _applyUpdateBanner() {
   const info = state._updateAvailable;
   if (!info) return;
-  const { current, latest } = info;
+  const { current, latest, autoUpdate } = info;
+  const downloaded = state._updateDownloaded;
+
   const el = $('aboutVersion');
-  if (el && !el.dataset.updateApplied) {
-    el.innerHTML = `v${current} <span style="color:var(--green);font-size:10px;margin-left:6px">v${latest} available</span>`;
-    el.dataset.updateApplied = '1';
+  if (el) {
+    if (downloaded) {
+      el.innerHTML = `v${current} <span style="color:var(--green);font-size:10px;margin-left:6px">v${downloaded} ready to install</span>`;
+    } else {
+      el.innerHTML = `v${current} <span style="color:var(--green);font-size:10px;margin-left:6px">v${latest} available</span>`;
+    }
   }
+
+  // Remove old button if state changed
+  const oldBtn = $('updateBtn');
+  if (oldBtn && downloaded && !oldBtn.dataset.isRestart) oldBtn.parentElement?.remove();
+
   // Add update button in settings if not already there
   if (!$('updateBtn')) {
     const aboutEl = document.querySelector('.settings-about');
     if (aboutEl) {
       const btn = document.createElement('div');
       btn.style.cssText = 'margin-top:10px';
-      btn.innerHTML = '<button id="updateBtn" class="tb-btn primary" style="font-size:11px;padding:6px 16px">Download v' + latest + '</button>';
-      aboutEl.appendChild(btn);
-      $('updateBtn')?.addEventListener('click', () => {
-        window.electronAPI?.openExternal('https://github.com/sharanagouda/react-native-debugger/releases');
-      });
+      if (downloaded) {
+        // Update is downloaded — show "Restart & Update"
+        btn.innerHTML = '<button id="updateBtn" data-is-restart="1" class="tb-btn primary" style="font-size:11px;padding:6px 16px">Restart & Update to v' + downloaded + '</button>';
+        aboutEl.appendChild(btn);
+        $('updateBtn')?.addEventListener('click', () => {
+          window.electronAPI?.installUpdate();
+        });
+      } else if (autoUpdate) {
+        // Auto-update in progress — show downloading status
+        btn.innerHTML = '<button id="updateBtn" class="tb-btn" style="font-size:11px;padding:6px 16px;opacity:0.7" disabled>Downloading v' + latest + '...</button>';
+        aboutEl.appendChild(btn);
+      } else {
+        // npx/manual — show download link
+        btn.innerHTML = '<button id="updateBtn" class="tb-btn primary" style="font-size:11px;padding:6px 16px">Download v' + latest + '</button>';
+        aboutEl.appendChild(btn);
+        $('updateBtn')?.addEventListener('click', () => {
+          window.electronAPI?.openExternal('https://github.com/sharanagouda/react-native-debugger/releases');
+        });
+      }
     }
   }
 }
@@ -362,6 +435,7 @@ function initConsolePanel() {
       <span class="badge" id="cBadge">0</span>
       <input id="consoleSearch" class="net-search-input" style="margin-left:12px" placeholder="Filter logs..." />
       <div class="ml-auto" style="display:flex;align-items:center;gap:6px">
+        <button class="panel-clear-btn" id="consoleExport" title="Export logs as JSON">Export</button>
         <button class="panel-clear-btn" id="consoleClear" title="Clear console">Clear</button>
         <div class="console-level-dropdown" id="consoleLevelDropdown">
           <button class="console-level-btn" id="consoleLevelBtn">Levels ▾</button>
@@ -426,9 +500,19 @@ function initConsolePanel() {
 
   updateLevelBtnText();
 
+  $('consoleExport')?.addEventListener('click', () => {
+    const data = JSON.stringify(state.console.logs, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `reactoradar-console-${Date.now()}.json`; a.click();
+    URL.revokeObjectURL(url);
+  });
+
   $('consoleClear').addEventListener('click', () => {
     state.console.logs = [];
     _consolePending = [];
+    _lastLogMsg = ''; _lastLogRow = null; _lastLogCount = 1;
     $('cBadge').textContent = '0';
     renderConsole();
   });
@@ -497,13 +581,85 @@ function updateLevelBtnText() {
 
 // Console is fed via IPC (network-event handled in IPC section above)
 
+// ─── Toast Notifications ─────────────────────────────────────────────────────
+let _toastContainer = null;
+const _activeToasts = {};
+
+function getToastsEnabled() {
+  try { return localStorage.getItem('rn-debug-toasts') !== 'false'; } catch { return true; }
+}
+function setToastsEnabled(v) {
+  try { localStorage.setItem('rn-debug-toasts', v ? 'true' : 'false'); } catch {}
+}
+
+function showToast(message, type, targetPanel) {
+  if (!getToastsEnabled()) return;
+  if (!_toastContainer) {
+    _toastContainer = document.createElement('div');
+    _toastContainer.id = 'toastContainer';
+    _toastContainer.className = 'toast-container';
+    document.body.appendChild(_toastContainer);
+  }
+  // Don't show toast if user is already on the target panel
+  if (targetPanel && state.activePanel === targetPanel) return;
+
+  // Deduplicate: if same message already showing, increment count
+  const key = `${type}:${message}`;
+  if (_activeToasts[key] && _activeToasts[key].el.parentNode) {
+    const existing = _activeToasts[key];
+    existing.count++;
+    const msgEl = existing.el.querySelector('.toast-msg');
+    if (msgEl) msgEl.textContent = `${message} (${existing.count})`;
+    // Reset auto-remove timer
+    clearTimeout(existing.timer);
+    existing.timer = setTimeout(() => {
+      if (existing.el.parentNode) existing.el.remove();
+      delete _activeToasts[key];
+    }, 5000);
+    return;
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type || 'info'}`;
+  toast.innerHTML = `<span class="toast-msg">${esc(message)}</span>`;
+  if (targetPanel) {
+    const btn = document.createElement('span');
+    btn.className = 'toast-action';
+    btn.textContent = 'View';
+    btn.addEventListener('click', () => { switchPanel(targetPanel); toast.remove(); delete _activeToasts[key]; });
+    toast.appendChild(btn);
+  }
+  const close = document.createElement('span');
+  close.className = 'toast-close';
+  close.textContent = '✕';
+  close.addEventListener('click', () => { toast.remove(); delete _activeToasts[key]; });
+  toast.appendChild(close);
+
+  _toastContainer.appendChild(toast);
+  const timer = setTimeout(() => {
+    if (toast.parentNode) toast.remove();
+    delete _activeToasts[key];
+  }, 5000);
+  _activeToasts[key] = { el: toast, count: 1, timer };
+  // Keep max 3 toasts
+  const toasts = _toastContainer.querySelectorAll('.toast');
+  if (toasts.length > 3) { toasts[0].remove(); }
+}
+
 // ─── Batched console append (fixes re-render performance) ────────────────────
 let _consolePending = [];
 let _consoleRAF = null;
 
+let _lastLogMsg = '';
+let _lastLogRow = null;
+let _lastLogCount = 1;
+
+const MAX_CONSOLE_LOGS = 5000;
+
 function addConsoleLog(event) {
   state.console.logs.push(event);
   _consolePending.push(event);
+
   // Batch DOM updates via rAF — only one paint per frame
   if (!_consoleRAF) {
     _consoleRAF = requestAnimationFrame(flushConsoleBatch);
@@ -532,7 +688,26 @@ function flushConsoleBatch() {
       if (!state.console.showRedux) return;
     } else if (levelFilters && !levelFilters[l.level]) return;
     if (searchFilter && !l.message?.toLowerCase().includes(searchFilter)) return;
-    frag.appendChild(buildLogRow(l));
+
+    // Group consecutive identical messages
+    const msgKey = `${l.level}:${l.message || ''}`;
+    if (msgKey === _lastLogMsg && _lastLogRow && _lastLogRow.parentNode) {
+      _lastLogCount++;
+      let badge = _lastLogRow.querySelector('.log-group-badge');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'log-group-badge';
+        _lastLogRow.insertBefore(badge, _lastLogRow.firstChild);
+      }
+      badge.textContent = _lastLogCount;
+      return; // Don't add a new row
+    }
+
+    _lastLogMsg = msgKey;
+    _lastLogCount = 1;
+    const row = buildLogRow(l);
+    _lastLogRow = row;
+    frag.appendChild(row);
     added++;
   });
 
@@ -542,9 +717,9 @@ function flushConsoleBatch() {
     // Auto-scroll only if user is already near the bottom (within 150px)
     const wasAtBottom = (list.scrollHeight - list.scrollTop - list.clientHeight) < 150;
     list.appendChild(frag);
-    // Keep DOM size manageable — remove oldest rows if over limit
+    // Keep DOM size manageable — remove oldest rows
     const rows = list.querySelectorAll('.log-row');
-    const MAX_DOM_ROWS = 5000;
+    const MAX_DOM_ROWS = 2000;
     if (rows.length > MAX_DOM_ROWS) {
       const toRemove = rows.length - MAX_DOM_ROWS;
       for (let i = 0; i < toRemove; i++) rows[i].remove();
@@ -911,6 +1086,12 @@ function showContextMenu(e, items) {
   const menu = document.createElement('div');
   menu.className = 'ctx-menu';
   items.forEach(({ label, action }) => {
+    if (label === '—' || !action) {
+      const sep = document.createElement('div');
+      sep.className = 'ctx-sep';
+      menu.appendChild(sep);
+      return;
+    }
     const item = document.createElement('div');
     item.className = 'ctx-item';
     item.textContent = label;
@@ -943,17 +1124,20 @@ function renderConsole() {
   });
 
   list.querySelectorAll('.log-row').forEach(e => e.remove());
-  if (visible.length > 0) {
+  if (!empty) { /* guard */ }
+  else if (visible.length > 0) {
     empty.style.display = 'none';
   } else if (state.console.logs.length > 0) {
-    // Logs exist but are all filtered out
-    empty.querySelector('.label').textContent = 'No matching logs';
-    empty.querySelector('.hint').textContent = 'Adjust level filters or clear search to see logs';
+    const lbl = empty.querySelector('.label');
+    const hint = empty.querySelector('.hint');
+    if (lbl) lbl.textContent = 'No matching logs';
+    if (hint) hint.textContent = 'Adjust level filters or clear search to see logs';
     empty.style.display = 'flex';
   } else {
-    // No logs at all
-    empty.querySelector('.label').textContent = 'No logs yet';
-    empty.querySelector('.hint').textContent = 'Logs will appear here automatically';
+    const lbl = empty.querySelector('.label');
+    const hint = empty.querySelector('.hint');
+    if (lbl) lbl.textContent = 'No logs yet';
+    if (hint) hint.textContent = 'Logs will appear here automatically';
     empty.style.display = 'flex';
   }
 
@@ -994,6 +1178,7 @@ function initNetworkPanel() {
       <span class="panel-label">Network</span>
       <span class="badge" id="nBadge">0</span>
       <div class="ml-auto" style="display:flex;align-items:center;gap:6px">
+        <button class="panel-clear-btn" id="networkExport" title="Export as HAR">Export HAR</button>
         <button class="panel-clear-btn" id="networkClear" title="Clear network">Clear</button>
         <label class="toggle-label" for="netToggle">
           <span class="toggle-text" id="netToggleText">Capture ON</span>
@@ -1014,6 +1199,16 @@ function initNetworkPanel() {
         <button class="net-type-btn" data-type="font">Font</button>
         <button class="net-type-btn" data-type="doc">Doc</button>
         <button class="net-type-btn" data-type="ws">WS</button>
+      </div>
+      <div class="net-status-filters" id="netStatusFilters">
+        <button class="net-status-btn active" data-status="all">All</button>
+        <button class="net-status-btn" data-status="2xx">2xx</button>
+        <button class="net-status-btn" data-status="errors">Errors</button>
+        <button class="net-status-btn net-slow-btn" data-status="slow">Slow (>1s)</button>
+      </div>
+      <div class="net-hidden-wrap" style="position:relative;margin-left:4px">
+        <button class="net-status-btn net-hidden-btn" id="netHiddenBtn" style="display:none" title="Manage hidden URLs">Hidden</button>
+        <div class="net-hidden-dropdown" id="netHiddenDropdown" style="display:none"></div>
       </div>
       <div class="net-throttle" id="netThrottle">
         <select id="netThrottleSelect" class="net-throttle-select">
@@ -1042,6 +1237,17 @@ function initNetworkPanel() {
         </div>
         <div class="detail-content" id="netDetailContent"></div>
       </div>
+    </div>
+    <div class="net-stats-bar" id="netStatsBar">
+      <span id="netStatsTotal">0 requests</span>
+      <span class="net-stats-sep">|</span>
+      <span id="netStatsAvg">Avg: —</span>
+      <span class="net-stats-sep">|</span>
+      <span id="netStatsSlowest">Slowest: —</span>
+      <span class="net-stats-sep">|</span>
+      <span id="netStatsErrors">Errors: 0</span>
+      <span class="net-stats-sep">|</span>
+      <span id="netStatsSlow">Slow (>1s): 0</span>
     </div>`;
 
   $('netToggle').addEventListener('change', (e) => {
@@ -1066,11 +1272,105 @@ function initNetworkPanel() {
     renderNetwork();
   });
 
+  // Status filter buttons (All / 2xx / Errors / Slow)
+  $('netStatusFilters').addEventListener('click', (e) => {
+    const btn = e.target.closest('.net-status-btn');
+    if (!btn) return;
+    $('netStatusFilters').querySelectorAll('.net-status-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.network.statusFilter = btn.dataset.status;
+    renderNetwork();
+  });
+
+  // Hidden URLs button
+  $('netHiddenBtn')?.addEventListener('click', () => {
+    const dd = $('netHiddenDropdown');
+    if (!dd) return;
+    const isOpen = dd.style.display !== 'none';
+    if (isOpen) { dd.style.display = 'none'; return; }
+    // Build dropdown with hidden URL list
+    const hidden = getHiddenURLs();
+    dd.innerHTML = '';
+    if (!hidden.length) { dd.style.display = 'none'; return; }
+    const title = document.createElement('div');
+    title.className = 'net-hidden-title';
+    title.innerHTML = `<span>Hidden URLs (${hidden.length})</span><button class="net-hidden-clear" id="netHiddenClearAll">Clear All</button>`;
+    dd.appendChild(title);
+    hidden.forEach(pattern => {
+      const row = document.createElement('div');
+      row.className = 'net-hidden-row';
+      const label = document.createElement('span');
+      label.className = 'net-hidden-url';
+      label.textContent = pattern;
+      label.title = pattern;
+      row.appendChild(label);
+      const btn = document.createElement('button');
+      btn.className = 'net-hidden-unhide';
+      btn.textContent = 'Unhide';
+      btn.addEventListener('click', () => {
+        removeHiddenURL(pattern);
+        row.remove();
+        renderNetwork();
+        if (!getHiddenURLs().length) dd.style.display = 'none';
+      });
+      row.appendChild(btn);
+      dd.appendChild(row);
+    });
+    dd.style.display = 'block';
+    // Clear all handler
+    dd.querySelector('#netHiddenClearAll')?.addEventListener('click', () => {
+      setHiddenURLs([]);
+      _updateHiddenBadge();
+      dd.style.display = 'none';
+      renderNetwork();
+    });
+  });
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    const dd = $('netHiddenDropdown');
+    if (dd && dd.style.display !== 'none' && !e.target.closest('.net-hidden-wrap')) {
+      dd.style.display = 'none';
+    }
+  });
+  // Initialize hidden badge
+  _updateHiddenBadge();
+
   // Throttle select
   $('netThrottleSelect').addEventListener('change', (e) => {
     state.network.throttle = e.target.value;
     // Send throttle config to the RN app
     window.electronAPI?.setNetworkThrottle(state.network.throttle);
+  });
+
+  // Export network as HAR
+  $('networkExport')?.addEventListener('click', () => {
+    const entries = state.network.order.map(id => {
+      const r = state.network.requests[id];
+      if (!r) return null;
+      return {
+        startedDateTime: new Date(r.ts || Date.now()).toISOString(),
+        time: r.duration || 0,
+        request: {
+          method: r.method || 'GET',
+          url: r.url || '',
+          headers: Object.entries(r.requestHeaders || {}).map(([n, v]) => ({ name: n, value: v })),
+          postData: r.requestBody ? { mimeType: 'application/json', text: typeof r.requestBody === 'object' ? JSON.stringify(r.requestBody) : String(r.requestBody) } : undefined,
+        },
+        response: {
+          status: r.status || 0,
+          statusText: r.statusText || '',
+          headers: Object.entries(r.responseHeaders || {}).map(([n, v]) => ({ name: n, value: v })),
+          content: { size: -1, mimeType: 'application/json', text: r.responseBody ? (typeof r.responseBody === 'object' ? JSON.stringify(r.responseBody) : String(r.responseBody)) : '' },
+        },
+        timings: { send: 0, wait: r.duration || 0, receive: 0 },
+      };
+    }).filter(Boolean);
+    const har = { log: { version: '1.2', creator: { name: 'ReactoRadar', version: '1.6.0' }, entries } };
+    const blob = new Blob([JSON.stringify(har, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `reactoradar-network-${Date.now()}.har`; a.click();
+    URL.revokeObjectURL(url);
   });
 
   // Clear network
@@ -1225,9 +1525,25 @@ function handleNetworkEvent(event) {
   if (phase === 'request') {
     state.network.requests[id] = { ...event, _tab: 'headers' };
     if (!state.network.order.includes(id)) state.network.order.push(id);
+    // Cap network history to prevent memory leak
+    const MAX_NET_HISTORY = 1000;
+    if (state.network.order.length > MAX_NET_HISTORY) {
+      const trimIds = state.network.order.splice(0, state.network.order.length - MAX_NET_HISTORY);
+      trimIds.forEach(tid => delete state.network.requests[tid]);
+    }
     $('nBadge').textContent = state.network.order.length;
   } else {
     Object.assign(state.network.requests[id] || (state.network.requests[id] = {}), event);
+    // Toast for errors and slow APIs
+    const r = state.network.requests[id];
+    if (r && (phase === 'response' || phase === 'error')) {
+      const name = r.url?.split('/').pop()?.split('?')[0] || r.url || '?';
+      if (r.phase === 'error' || (r.status && r.status >= 400)) {
+        showToast(`API Error: ${r.status || 'ERR'} ${name}`, 'error', 'network');
+      } else if ((r.duration || 0) >= 3000) {
+        showToast(`Slow API: ${(r.duration/1000).toFixed(1)}s — ${name}`, 'warn', 'network');
+      }
+    }
   }
   if (!_netRAF) {
     _netRAF = requestAnimationFrame(() => {
@@ -1283,8 +1599,10 @@ function renderNetwork() {
     if (!r) return false;
     if (statusFilter === '2xx' && !(r.status >= 200 && r.status < 300)) return false;
     if (statusFilter === 'errors' && !(r.phase === 'error' || r.status >= 400)) return false;
+    if (statusFilter === 'slow' && !((r.duration || 0) >= 1000)) return false;
     if (searchFilter && !r.url?.toLowerCase().includes(searchFilter)) return false;
     if (typeFilter !== 'all' && !matchNetType(r, typeFilter)) return false;
+    if (isURLHidden(r.url || '')) return false;
     return true;
   });
 
@@ -1319,6 +1637,32 @@ function renderNetwork() {
     frag.appendChild(buildNetRow(r, wfMin, wfRange));
   });
   rows.appendChild(frag);
+  _updateNetStats();
+}
+
+function _updateNetStats() {
+  const allReqs = state.network.order.map(id => state.network.requests[id]).filter(Boolean);
+  const completed = allReqs.filter(r => r.duration != null);
+  const total = allReqs.length;
+  const errors = allReqs.filter(r => r.phase === 'error' || (r.status && r.status >= 400)).length;
+  const slow = completed.filter(r => r.duration >= 1000).length;
+  const durations = completed.map(r => r.duration);
+  const avg = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
+  const slowest = durations.length ? Math.max(...durations) : 0;
+  const slowestReq = completed.find(r => r.duration === slowest);
+  const slowestName = slowestReq ? (tryURL(slowestReq.url)?.pathname?.split('/').pop() || slowestReq.url?.split('/').pop() || '?') : '—';
+
+  const el = (id, text) => { const e = $(id); if (e) e.textContent = text; };
+  el('netStatsTotal', `${total} requests`);
+  el('netStatsAvg', `Avg: ${avg ? (avg > 999 ? `${(avg/1000).toFixed(1)}s` : `${avg}ms`) : '—'}`);
+  el('netStatsSlowest', `Slowest: ${slowest ? (slowest > 999 ? `${(slowest/1000).toFixed(1)}s` : `${slowest}ms`) + ` (${slowestName})` : '—'}`);
+  el('netStatsErrors', `Errors: ${errors}`);
+  el('netStatsSlow', `Slow (>1s): ${slow}`);
+  // Highlight if there are slow or errored requests
+  if (slow > 0) $('netStatsSlow')?.classList.add('warn');
+  else $('netStatsSlow')?.classList.remove('warn');
+  if (errors > 0) $('netStatsErrors')?.classList.add('err');
+  else $('netStatsErrors')?.classList.remove('err');
 }
 
 function _isHttpError(r) {
@@ -1327,7 +1671,9 @@ function _isHttpError(r) {
 
 function buildNetRow(r, wfMin, wfRange) {
   const row = document.createElement('div');
-  row.className = 'net-row' + (r.id === state.network.selectedId ? ' selected' : '') + (_isHttpError(r) ? ' error' : '');
+  const rowSlow = !_isHttpError(r) && (r.duration || 0) >= 1000;
+  const rowVerySlow = !_isHttpError(r) && (r.duration || 0) >= 3000;
+  row.className = 'net-row' + (r.id === state.network.selectedId ? ' selected' : '') + (_isHttpError(r) ? ' error' : '') + (rowVerySlow ? ' very-slow' : rowSlow ? ' slow' : '');
   row.dataset.id = r.id;
 
   const urlObj = tryURL(r.url);
@@ -1394,7 +1740,9 @@ function buildNetRow(r, wfMin, wfRange) {
 
   // Time
   const timeCell = document.createElement('div');
-  timeCell.className = 'net-cell net-time' + ((r.duration || 0) > 1500 ? ' slow' : '');
+  const dur = r.duration || 0;
+  const slowClass = dur >= 3000 ? ' very-slow' : dur >= 1000 ? ' slow' : '';
+  timeCell.className = 'net-cell net-time' + slowClass;
   timeCell.dataset.col = 'time';
   timeCell.style.width = NET_COLS[5].width + 'px';
   timeCell.textContent = r.duration != null ? (r.duration > 999 ? `${(r.duration/1000).toFixed(1)}s` : `${r.duration}ms`) : '...';
@@ -1589,6 +1937,12 @@ function showNetContextMenu(e, r) {
       navigator.clipboard.writeText(text);
     }});
   }
+  // Hide URL option
+  items.push({ label: '—', action: null }); // separator
+  items.push({ label: 'Hide this URL', action: () => {
+    addHiddenURL(r.url || '');
+    renderNetwork();
+  }});
   showContextMenu(e, items);
 }
 
@@ -1634,7 +1988,12 @@ function initGA4Panel() {
       <span class="panel-label">GA4 Events</span>
       <span class="badge" id="ga4Badge">0</span>
       <input id="ga4Search" class="net-search-input" style="margin-left:12px" placeholder="Filter events..." />
-      <div class="ml-auto">
+      <div class="ml-auto" style="display:flex;align-items:center;gap:6px">
+        <label class="toggle-label" for="ga4ColorToggle" style="font-size:10px;gap:4px">
+          <span style="color:var(--text-dim)">Colors</span>
+          <input type="checkbox" id="ga4ColorToggle" class="toggle-input" ${getGA4ColorsEnabled() ? 'checked' : ''} />
+          <span class="toggle-slider"></span>
+        </label>
         <button class="panel-clear-btn" id="ga4Clear" title="Clear GA4 events">Clear</button>
       </div>
     </div>
@@ -1668,6 +2027,12 @@ function initGA4Panel() {
     ga4State.searchFilter = e.target.value.toLowerCase().trim();
     renderGA4List();
     renderGA4Summary(); // update active chip highlight
+  });
+
+  $('ga4ColorToggle')?.addEventListener('change', (e) => {
+    setGA4ColorsEnabled(e.target.checked);
+    renderGA4List();
+    renderGA4Summary();
   });
 
   $('ga4Clear').addEventListener('click', () => {
@@ -1709,6 +2074,7 @@ function initGA4Panel() {
 }
 
 function handleGA4Event(event) {
+  if (!isTabEnabled('ga4')) return;
   ga4State.events.push({
     name: event.name || '?',
     params: event.params || {},
@@ -1727,6 +2093,38 @@ function handleGA4Event(event) {
       renderGA4Summary();
     });
   }
+}
+
+// Assign consistent color to each GA4 event name
+const _ga4EventColors = {};
+const _ga4ColorPalette = [
+  '#4facff',  // blue
+  '#3dd68c',  // green
+  '#ff813f',  // orange
+  '#c678dd',  // purple
+  '#e06c75',  // coral
+  '#56b6c2',  // teal
+  '#d19a66',  // gold
+  '#98c379',  // lime
+  '#e5c07b',  // yellow
+  '#ff5e72',  // red
+  '#61afef',  // light blue
+  '#be5046',  // rust
+];
+let _ga4ColorIdx = 0;
+function _ga4EventColor(name) {
+  if (!getGA4ColorsEnabled()) return ''; // empty = inherit default text color
+  if (!_ga4EventColors[name]) {
+    _ga4EventColors[name] = _ga4ColorPalette[_ga4ColorIdx % _ga4ColorPalette.length];
+    _ga4ColorIdx++;
+  }
+  return _ga4EventColors[name];
+}
+function getGA4ColorsEnabled() {
+  try { return localStorage.getItem('rn-debug-ga4-colors') === 'true'; } catch { return false; }
+}
+function setGA4ColorsEnabled(v) {
+  try { localStorage.setItem('rn-debug-ga4-colors', v ? 'true' : 'false'); } catch {}
 }
 
 function renderGA4List() {
@@ -1758,9 +2156,11 @@ function renderGA4List() {
 
     const time = new Date(e.ts).toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
 
+    const evtColor = _ga4EventColor(e.name);
+    const colorStyle = evtColor ? `color:${evtColor}` : '';
     row.innerHTML = `
       <span class="ga4-cell ga4-time">${time}</span>
-      <span class="ga4-cell ga4-name">${esc(e.name)}</span>`;
+      <span class="ga4-cell ga4-name" style="${colorStyle}">${esc(e.name)}</span>`;
 
     row.addEventListener('click', () => {
       ga4State.selected = e.index;
@@ -1795,7 +2195,7 @@ function renderGA4Detail(e) {
   const header = document.createElement('div');
   header.className = 'ga4-detail-info';
   header.innerHTML = `
-    <div class="ga4-detail-row"><span class="ga4-detail-key">Event Name</span><span class="ga4-detail-val" style="color:var(--accent);font-weight:600">${esc(e.name)}</span></div>
+    <div class="ga4-detail-row"><span class="ga4-detail-key">Event Name</span><span class="ga4-detail-val" style="${_ga4EventColor(e.name) ? 'color:' + _ga4EventColor(e.name) + ';' : ''}font-weight:600;font-size:1.1em">${esc(e.name)}</span></div>
     <div class="ga4-detail-row"><span class="ga4-detail-key">Timestamp</span><span class="ga4-detail-val">${time}</span></div>
 `;
   detail.appendChild(header);
@@ -1869,8 +2269,15 @@ function renderGA4Summary() {
   sorted.forEach(([name, count]) => {
     const chip = document.createElement('span');
     const isActive = ga4State.searchFilter === name.toLowerCase();
+    const chipColor = _ga4EventColor(name);
     chip.className = 'ga4-summary-chip' + (isActive ? ' active' : '');
-    chip.innerHTML = `<b>${esc(name)}</b><span class="chip-count">${count}</span>`;
+    if (chipColor) {
+      chip.style.borderColor = chipColor;
+      if (isActive) chip.style.background = chipColor + '22';
+      chip.innerHTML = `<b style="color:${chipColor}">${esc(name)}</b><span class="chip-count">${count}</span>`;
+    } else {
+      chip.innerHTML = `<b>${esc(name)}</b><span class="chip-count">${count}</span>`;
+    }
     chip.addEventListener('click', () => {
       const search = $('ga4Search');
       if (isActive) {
@@ -2078,6 +2485,8 @@ function _createHighlightedTree(key, val, changedPaths, currentPath, isOld) {
 
 function handleReduxEvent(event) {
   if (event.type !== 'redux') return;
+  // Skip processing if Redux tab is disabled (saves memory)
+  if (!isTabEnabled('redux')) return;
   const { action, nextState } = event;
   const idx = state.redux.actions.length;
 
@@ -2091,6 +2500,16 @@ function handleReduxEvent(event) {
   const actionEntry = { type: action?.type || '?', payload: action, ts: event.ts, index: idx, changedKeys };
   state.redux.actions.push(actionEntry);
   state.redux.states.push(nextState);
+  // Cap Redux history to prevent memory leak (full state stored per action)
+  const MAX_REDUX_HISTORY = 500;
+  if (state.redux.actions.length > MAX_REDUX_HISTORY) {
+    const trim = state.redux.actions.length - MAX_REDUX_HISTORY;
+    state.redux.actions.splice(0, trim);
+    state.redux.states.splice(0, trim);
+    // Re-index remaining actions
+    state.redux.actions.forEach((a, i) => a.index = i);
+    if (state.redux.selected >= 0) state.redux.selected = Math.max(0, state.redux.selected - trim);
+  }
   // Don't auto-select — keep all collapsed until user clicks
   $('rBadge').textContent = state.redux.actions.length;
   renderRedux();
@@ -2363,6 +2782,7 @@ let _storageRAF = null;
 
 function handleStorageEvent(event) {
   if (event.type !== 'storage') return;
+  if (!isTabEnabled('storage')) return;
   const { key, value, action } = event;
   if (action === 'set' || action === 'snapshot') {
     if (action === 'snapshot' && typeof key === 'object') {
@@ -2489,6 +2909,226 @@ function setStoredFontSize(s) {
   try { localStorage.setItem('rn-debug-fontsize', String(s)); } catch {}
 }
 
+const FONT_FAMILIES = [
+  { label: 'SF Mono', value: "'SFMono-Regular', 'SF Mono', monospace" },
+  { label: 'Menlo', value: "Menlo, monospace" },
+  { label: 'Monaco', value: "Monaco, monospace" },
+  { label: 'Courier New', value: "'Courier New', Courier, monospace" },
+  { label: 'System Mono', value: "monospace" },
+];
+function getStoredFontFamily() {
+  try {
+    const saved = localStorage.getItem('rn-debug-fontfamily');
+    // Reset if saved value was a removed font
+    if (saved && !FONT_FAMILIES.some(f => f.value === saved)) return FONT_FAMILIES[0].value;
+    return saved || FONT_FAMILIES[0].value;
+  } catch { return FONT_FAMILIES[0].value; }
+}
+function setStoredFontFamily(f) {
+  try { localStorage.setItem('rn-debug-fontfamily', f); } catch {}
+}
+function applyFontFamily(family) {
+  document.body.style.fontFamily = family;
+}
+
+// ─── Hidden URLs (Network tab) ───────────────────────────────────────────────
+function getHiddenURLs() {
+  try { return JSON.parse(localStorage.getItem('rn-debug-hidden-urls') || '[]'); } catch { return []; }
+}
+function setHiddenURLs(list) {
+  try { localStorage.setItem('rn-debug-hidden-urls', JSON.stringify(list)); } catch {}
+}
+function addHiddenURL(url) {
+  // Extract the base URL (without query params) as the pattern
+  const pattern = url.split('?')[0];
+  const list = getHiddenURLs();
+  if (!list.includes(pattern)) {
+    list.push(pattern);
+    setHiddenURLs(list);
+  }
+  _updateHiddenBadge();
+}
+function removeHiddenURL(pattern) {
+  const list = getHiddenURLs().filter(u => u !== pattern);
+  setHiddenURLs(list);
+  _updateHiddenBadge();
+}
+function isURLHidden(url) {
+  const hidden = getHiddenURLs();
+  if (!hidden.length) return false;
+  const base = url.split('?')[0];
+  return hidden.some(pattern => base === pattern || base.startsWith(pattern));
+}
+function _updateHiddenBadge() {
+  const btn = $('netHiddenBtn');
+  if (!btn) return;
+  const count = getHiddenURLs().length;
+  btn.textContent = count > 0 ? `Hidden (${count})` : 'Hidden';
+  btn.style.display = count > 0 ? '' : 'none';
+}
+
+// ─── Tab Visibility ──────────────────────────────────────────────────────────
+const TAB_CONFIG = [
+  { id: 'console',     label: 'Console',     icon: '🖥', essential: true },
+  { id: 'network',     label: 'Network',     icon: '📡', essential: true },
+  { id: 'redux',       label: 'Redux',       icon: '🔲', essential: false },
+  { id: 'ga4',         label: 'GA4 Events',  icon: '📊', essential: false },
+  { id: 'storage',     label: 'Storage',     icon: '💾', essential: false },
+  { id: 'memory',      label: 'Memory',      icon: '🧠', essential: false },
+  { id: 'performance', label: 'Performance', icon: '⚡', essential: false },
+  { id: 'react',       label: 'React Tree',  icon: '⚛️', essential: false },
+];
+function getTabVisibility() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('rn-debug-tab-visibility') || '{}');
+    const result = {};
+    TAB_CONFIG.forEach(t => { result[t.id] = saved[t.id] !== undefined ? saved[t.id] : true; });
+    return result;
+  } catch {
+    const result = {};
+    TAB_CONFIG.forEach(t => { result[t.id] = true; });
+    return result;
+  }
+}
+function setTabVisibility(vis) {
+  try { localStorage.setItem('rn-debug-tab-visibility', JSON.stringify(vis)); } catch {}
+}
+function getTabOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('rn-debug-tab-order') || '[]');
+    if (saved.length === TAB_CONFIG.length) return saved;
+  } catch {}
+  return TAB_CONFIG.map(t => t.id);
+}
+function setTabOrder(order) {
+  try { localStorage.setItem('rn-debug-tab-order', JSON.stringify(order)); } catch {}
+}
+function applyTabVisibility() {
+  const vis = getTabVisibility();
+  const order = getTabOrder();
+  const nav = $('sidebar');
+  if (!nav) return;
+  // Reorder nav buttons according to saved order + hide disabled ones
+  // Settings button always stays last
+  const settingsBtn = nav.querySelector('.nav-btn[data-panel="settings"]');
+  const spacer = nav.querySelector('.nav-spacer');
+  const anchor = spacer || settingsBtn; // insert before spacer or settings
+  order.forEach(tabId => {
+    const btn = nav.querySelector(`.nav-btn[data-panel="${tabId}"]`);
+    if (btn) {
+      btn.style.display = vis[tabId] ? '' : 'none';
+      nav.insertBefore(btn, anchor);
+    }
+  });
+  // If active panel is now hidden, switch to first visible
+  if (!vis[state.activePanel]) {
+    const first = order.find(id => vis[id]);
+    if (first) switchPanel(first);
+  }
+}
+function isTabEnabled(tabId) {
+  return getTabVisibility()[tabId] !== false;
+}
+
+function _buildTabVisGrid() {
+  const container = $('tabVisibilityGrid');
+  if (!container) return;
+  container.innerHTML = '';
+  const vis = getTabVisibility();
+  const order = getTabOrder();
+  let dragSrc = null;
+
+  order.forEach(tabId => {
+    const t = TAB_CONFIG.find(c => c.id === tabId);
+    if (!t) return;
+
+    const item = document.createElement('div');
+    item.className = `tab-vis-item ${vis[t.id] ? 'active' : 'inactive'}`;
+    item.dataset.tab = t.id;
+    item.draggable = true;
+
+    // Drag handle
+    const drag = document.createElement('span');
+    drag.className = 'tab-vis-drag';
+    drag.textContent = '⠿';
+    item.appendChild(drag);
+
+    // Checkbox
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'tab-vis-check';
+    check.checked = vis[t.id];
+    if (t.essential) check.disabled = true;
+    check.addEventListener('change', () => {
+      const v = getTabVisibility();
+      v[t.id] = check.checked;
+      setTabVisibility(v);
+      applyTabVisibility();
+      item.classList.toggle('active', check.checked);
+      item.classList.toggle('inactive', !check.checked);
+    });
+    item.appendChild(check);
+
+    // Icon + label
+    const icon = document.createElement('span');
+    icon.className = 'tab-vis-icon';
+    icon.textContent = t.icon;
+    item.appendChild(icon);
+
+    const label = document.createElement('span');
+    label.className = 'tab-vis-label';
+    label.textContent = t.label;
+    item.appendChild(label);
+
+    if (t.essential) {
+      const req = document.createElement('span');
+      req.className = 'tab-vis-required';
+      req.textContent = 'Required';
+      item.appendChild(req);
+    }
+
+    // Drag events
+    item.addEventListener('dragstart', (e) => {
+      dragSrc = item;
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      container.querySelectorAll('.tab-vis-item').forEach(el => el.classList.remove('drag-over'));
+      dragSrc = null;
+    });
+    item.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragSrc && dragSrc !== item) item.classList.add('drag-over');
+    });
+    item.addEventListener('dragleave', () => {
+      item.classList.remove('drag-over');
+    });
+    item.addEventListener('drop', (e) => {
+      e.preventDefault();
+      item.classList.remove('drag-over');
+      if (!dragSrc || dragSrc === item) return;
+      // Reorder: move dragSrc before or after this item
+      const items = [...container.querySelectorAll('.tab-vis-item')];
+      const fromIdx = items.indexOf(dragSrc);
+      const toIdx = items.indexOf(item);
+      if (fromIdx < toIdx) {
+        container.insertBefore(dragSrc, item.nextSibling);
+      } else {
+        container.insertBefore(dragSrc, item);
+      }
+      // Save new order
+      const newOrder = [...container.querySelectorAll('.tab-vis-item')].map(el => el.dataset.tab);
+      setTabOrder(newOrder);
+      applyTabVisibility();
+    });
+
+    container.appendChild(item);
+  });
+}
+
 function getStoredAppName() {
   try { return localStorage.getItem('rn-debug-appname') || 'ReactoRadar'; } catch { return 'ReactoRadar'; }
 }
@@ -2553,108 +3193,119 @@ function initSettingsPanel() {
   const panel = $('panel-settings');
   const current = getStoredTheme();
   const currentSize = getStoredFontSize();
-  panel.innerHTML = `
+   panel.innerHTML = `
     <div class="panel-toolbar">
       <span class="panel-label">Settings</span>
     </div>
     <div class="scroll-area">
-      <div class="settings-content">
-        <div class="settings-section">
-          <div class="settings-section-title">Appearance</div>
-          <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-            <div>
-              <div class="settings-label">Theme</div>
-              <div class="settings-hint">Choose a color theme for the debugger</div>
+      <div class="settings-two-col">
+        <div class="settings-col-left">
+          <div class="settings-section">
+            <div class="settings-section-title">Appearance</div>
+            <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+              <div>
+                <div class="settings-label">Theme</div>
+                <div class="settings-hint">Choose a color theme</div>
+              </div>
+              <div class="theme-grid" id="themeSwitcher"></div>
             </div>
-            <div class="theme-grid" id="themeSwitcher"></div>
-          </div>
-          <div class="settings-row">
-            <div>
-              <div class="settings-label">Font Size</div>
-              <div class="settings-hint">Adjust text size across all panels</div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">Font Size</div>
+                <div class="settings-hint">Adjust text size</div>
+              </div>
+              <div class="font-size-control">
+                <button class="font-size-btn" id="fontSizeDown">A-</button>
+                <span class="font-size-display" id="fontSizeDisplay">${currentSize}px</span>
+                <button class="font-size-btn" id="fontSizeUp">A+</button>
+              </div>
             </div>
-            <div class="font-size-control">
-              <button class="font-size-btn" id="fontSizeDown">A-</button>
-              <span class="font-size-display" id="fontSizeDisplay">${currentSize}px</span>
-              <button class="font-size-btn" id="fontSizeUp">A+</button>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">Font Family</div>
+              </div>
+              <select id="fontFamilySelect" class="net-throttle-select" style="width:150px">
+                ${FONT_FAMILIES.map(f => `<option value="${esc(f.value)}" ${f.value === getStoredFontFamily() ? 'selected' : ''}>${esc(f.label)}</option>`).join('')}
+              </select>
             </div>
-           </div>
-          <div class="settings-row">
-            <div>
-              <div class="settings-label">App Name</div>
-              <div class="settings-hint">Customize the app title (visible in titlebar)</div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">App Name</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <input id="appNameInput" class="net-search-input" style="width:120px;text-align:center" value="${getStoredAppName()}" />
+                <button class="font-size-btn" id="appNameReset" title="Reset">Reset</button>
+              </div>
             </div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <input id="appNameInput" class="net-search-input" style="width:140px;text-align:center" value="${getStoredAppName()}" />
-              <button class="font-size-btn" id="appNameReset" title="Reset to default">Reset</button>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">Toast Notifications</div>
+                <div class="settings-hint">Show alerts for API errors and slow requests</div>
+              </div>
+              <label class="toggle-label" for="toastToggle">
+                <input type="checkbox" id="toastToggle" class="toggle-input" ${getToastsEnabled() ? 'checked' : ''} />
+                <span class="toggle-slider"></span>
+              </label>
             </div>
           </div>
-        </div>
-        <div class="settings-section">
-          <div class="settings-section-title">Connection</div>
-          <div class="settings-row">
-            <div>
-              <div class="settings-label">Bridge Ports</div>
-              <div class="settings-hint">Redux :9090 &middot; Storage :9091 &middot; Network :9092 &middot; React DT :8097</div>
+          <div class="settings-section">
+            <div class="settings-section-title">Connection</div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">Bridge Ports</div>
+                <div class="settings-hint">Redux :9090 · Storage :9091 · Network :9092</div>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">Metro Port</div>
+              </div>
+              <input id="metroPortInput" type="number" class="net-search-input" style="width:70px;text-align:center" value="${getStoredMetroPort()}" />
             </div>
           </div>
-          <div class="settings-row">
-            <div style="display:flex;flex-direction:column;gap:2px">
-              <div class="settings-label">Metro Bundler Port</div>
-              <div class="settings-hint">Port for CDP target discovery (default: 8081)</div>
-            </div>
-            <input id="metroPortInput" type="number" class="net-search-input" style="width:70px;text-align:center" value="${getStoredMetroPort()}" />
-          </div>
-        </div>
-        <div class="settings-section">
-          <div class="settings-section-title">Keyboard Shortcuts</div>
-          <div class="settings-row">
-            <div class="settings-label">Clear Active Tab</div>
-            <div class="settings-hint" style="font-size:11px;color:var(--text-mid)">Clear button</div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-label">Clear All</div>
-            <div class="settings-hint" style="font-size:11px;color:var(--text-mid)">&#8984;K</div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-label">Open JS Debugger</div>
-            <div class="settings-hint" style="font-size:11px;color:var(--text-mid)">&#8984;D</div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-label">Open React DevTools</div>
-            <div class="settings-hint" style="font-size:11px;color:var(--text-mid)">&#8984;R</div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-label">Toggle Theme</div>
-            <div class="settings-hint" style="font-size:11px;color:var(--text-mid)">&#8984;&#8679;T</div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-label">Zoom In / Out</div>
-            <div class="settings-hint" style="font-size:11px;color:var(--text-mid)">&#8984;+ / &#8984;-</div>
-          </div>
-        </div>
-        <div class="settings-section">
-          <div class="settings-section-title">How to Use</div>
-          <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-            <div class="settings-hint" style="line-height:1.8">
-              <b style="color:var(--text)">1. Setup</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx reactoradar setup</code> from your RN project<br/>
-              <b style="color:var(--text)">2. Start</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx reactoradar</code> or open ReactoRadar.app<br/>
-              <b style="color:var(--text)">3. Run your app</b> — <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx react-native start --reset-cache</code><br/>
-              <b style="color:var(--text)">4. Debug</b> — Console, Network, Redux data flows automatically<br/>
-              <b style="color:var(--text)">5. Remove</b> — Run <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx reactoradar remove</code> to clean uninstall
+          <div class="settings-section">
+            <div class="settings-section-title">About</div>
+            <div class="settings-about">
+              <div class="about-name" id="aboutAppName">${getStoredAppName()}</div>
+              <div class="about-version" id="aboutVersion">v${state._appVersion || '...'}</div>
+              <div class="about-desc">Standalone macOS debugger for React Native.<br/>Supports Hermes, New Arch, and RN 0.74+.</div>
+              <div class="about-links" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+                <span class="about-link" id="linkGithub">GitHub</span>
+                <span class="about-link" id="linkDocs">Docs</span>
+                <span class="about-link" id="linkLinkedIn">LinkedIn</span>
+              </div>
+              <div style="margin-top:12px;text-align:center">
+                <button class="support-btn" id="linkSupport" title="Support ReactoRadar development">☕ Support this project</button>
+              </div>
             </div>
           </div>
         </div>
-        <div class="settings-section">
-          <div class="settings-section-title">About</div>
-          <div class="settings-about">
-            <div class="about-name" id="aboutAppName">${getStoredAppName()}</div>
-            <div class="about-version" id="aboutVersion">v${state._appVersion || '...'}</div>
-            <div class="about-desc">A standalone macOS debugger for React Native apps.<br/>Supports Hermes, New Architecture, and React Native 0.74+.</div>
-            <div class="about-links" style="display:flex;gap:16px;justify-content:center">
-              <span class="about-link" id="linkGithub">GitHub</span>
-              <span class="about-link" id="linkDocs">Documentation</span>
-              <span class="about-link" id="linkLinkedIn">Developer LinkedIn</span>
+        <div class="settings-col-right">
+          <div class="settings-section">
+            <div class="settings-section-title">Panels</div>
+            <div class="settings-hint" style="margin-bottom:8px">Show/hide tabs and drag to reorder. Disabled tabs save memory.</div>
+            <div class="tab-visibility-grid" id="tabVisibilityGrid"></div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-title">Keyboard Shortcuts</div>
+            <div class="settings-shortcut-grid">
+              <span class="sc-key">⌘K</span><span class="sc-label">Clear All</span>
+              <span class="sc-key">⌘D</span><span class="sc-label">JS Debugger</span>
+              <span class="sc-key">⌘R</span><span class="sc-label">React DevTools</span>
+              <span class="sc-key">⌘⇧T</span><span class="sc-label">Toggle Theme</span>
+              <span class="sc-key">⌘F</span><span class="sc-label">Find</span>
+              <span class="sc-key">⌘1–9</span><span class="sc-label">Switch Panels</span>
+              <span class="sc-key">⌘+/−</span><span class="sc-label">Zoom</span>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-title">Quick Start</div>
+            <div class="settings-hint" style="line-height:1.8;font-size:11px">
+              <b style="color:var(--text)">1.</b> <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx reactoradar setup</code><br/>
+              <b style="color:var(--text)">2.</b> <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx reactoradar</code> or open app<br/>
+              <b style="color:var(--text)">3.</b> <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx react-native start</code><br/>
+              <b style="color:var(--text)">4.</b> Console, Network, Redux auto-connect<br/>
+              <b style="color:var(--text)">5.</b> <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx reactoradar remove</code> to uninstall
             </div>
           </div>
         </div>
@@ -2673,6 +3324,9 @@ function initSettingsPanel() {
     { id: 'github-dark',     name: 'GitHub Dark',     colors: ['#0d1117','#58a6ff','#3fb950','#f85149'] },
     { id: 'one-dark',        name: 'One Dark',        colors: ['#282c34','#61afef','#98c379','#e06c75'] },
   ];
+  // Tab visibility + drag reorder
+  _buildTabVisGrid();
+
   const grid = $('themeSwitcher');
   themes.forEach(t => {
     const btn = document.createElement('button');
@@ -2706,6 +3360,9 @@ function initSettingsPanel() {
   });
   $('linkLinkedIn')?.addEventListener('click', () => {
     window.electronAPI?.openExternal('https://www.linkedin.com/in/sharanagoudamk/');
+  });
+  $('linkSupport')?.addEventListener('click', () => {
+    window.electronAPI?.openExternal('https://razorpay.me/@reactoradar');
   });
 
   // App name
@@ -2743,14 +3400,64 @@ function initSettingsPanel() {
     applyFontSize(size);
   });
 
+  // Font family
+  $('fontFamilySelect')?.addEventListener('change', (e) => {
+    const family = e.target.value;
+    setStoredFontFamily(family);
+    applyFontFamily(family);
+  });
+
+  // Toast toggle
+  $('toastToggle')?.addEventListener('change', (e) => {
+    setToastsEnabled(e.target.checked);
+  });
+
   // Apply update banner if update info arrived before settings panel was created
   _applyUpdateBanner();
 }
 
-// Apply saved theme + font size + app name on load
+// ─── Memory Monitor ──────────────────────────────────────────────────────────
+// Check memory usage periodically and warn user before it causes blank screen
+let _memoryWarningShown = false;
+setInterval(() => {
+  if (!window.performance || !performance.memory) return;
+  const used = performance.memory.usedJSHeapSize;
+  const limit = performance.memory.jsHeapSizeLimit;
+  const pct = used / limit;
+  // Warn at 70% usage
+  if (pct > 0.7 && !_memoryWarningShown) {
+    _memoryWarningShown = true;
+    const banner = document.createElement('div');
+    banner.id = 'memoryWarning';
+    banner.className = 'memory-warning';
+    const usedMB = Math.round(used / 1024 / 1024);
+    banner.innerHTML = `<span>High memory usage (${usedMB}MB) — ReactoRadar may become unresponsive.</span>`
+      + `<button class="memory-warn-btn" id="memWarnClear">Clear All Data</button>`
+      + `<button class="memory-warn-btn" id="memWarnDismiss">Dismiss</button>`;
+    document.body.prepend(banner);
+    $('memWarnClear')?.addEventListener('click', () => {
+      // Clear all panel data
+      state.console.logs = []; _consolePending = [];
+      _lastLogMsg = ''; _lastLogRow = null; _lastLogCount = 1;
+      $('cBadge').textContent = '0'; renderConsole();
+      state.network.requests = {}; state.network.order = []; state.network.selectedId = null;
+      $('nBadge').textContent = '0'; renderNetwork();
+      state.redux.actions = []; state.redux.states = []; state.redux.selected = -1;
+      $('rBadge').textContent = '0'; renderRedux();
+      banner.remove(); _memoryWarningShown = false;
+    });
+    $('memWarnDismiss')?.addEventListener('click', () => { banner.remove(); });
+  }
+  // Reset flag when memory drops
+  if (pct < 0.5) _memoryWarningShown = false;
+}, 30000); // Check every 30 seconds
+
+// Apply saved theme + font size + font family + app name on load
 applyTheme(getStoredTheme());
 applyFontSize(getStoredFontSize());
+applyFontFamily(getStoredFontFamily());
 applyAppName(getStoredAppName());
+applyTabVisibility();
 
 // Send stored metro port to backend
 window.electronAPI?.setMetroPort(getStoredMetroPort());
@@ -2965,8 +3672,7 @@ function buildSourceTreeNode(name, value, depth) {
     });
   }
 
-  if (!startCollapsed) populate();
-
+  // Folders start collapsed — populate lazily on first expand
   header.addEventListener('click', () => {
     const isOpen = children.style.display !== 'none';
     if (!isOpen) {
@@ -3151,6 +3857,7 @@ function drawPerfGraph(canvasId, data, maxVal, color) {
 
 // Handle performance events from SDK (always updates meters, graphs only when recording)
 function handlePerfEvent(event) {
+  if (!isTabEnabled('performance') && !isTabEnabled('memory')) return;
   if (event.fps != null) {
     perfState.fps.push(event.fps);
     if (perfState.fps.length > 100) perfState.fps.shift();

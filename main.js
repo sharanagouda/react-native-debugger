@@ -1,10 +1,12 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Menu, shell, nativeTheme, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell, nativeTheme, nativeImage, dialog } = require('electron');
 const path = require('path');
 const http = require('http');
 const https = require('https');
 const { WebSocketServer, WebSocket } = require('ws');
+let autoUpdater = null;
+try { autoUpdater = require('electron-updater').autoUpdater; } catch {}
 
 // ─── Ports ────────────────────────────────────────────────────────────────────
 const PORTS = {
@@ -154,6 +156,40 @@ function _semverCompare(a, b) {
 
 function checkForUpdates() {
   const currentVersion = require('./package.json').version;
+
+  // ─── Electron Auto-Updater (for .dmg installs) ────────────────────────────
+  // Downloads and installs updates from GitHub Releases automatically.
+  if (autoUpdater && app.isPackaged) {
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('update-available', (info) => {
+      console.log(`[AutoUpdate] New version available: ${info.version}`);
+      const payload = { current: currentVersion, latest: info.version, autoUpdate: true };
+      [500, 2000].forEach(delay => setTimeout(() => _send('update-available', payload), delay));
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      console.log(`[AutoUpdate] Update downloaded: ${info.version}`);
+      _send('update-downloaded', { version: info.version });
+    });
+
+    autoUpdater.on('error', (err) => {
+      console.warn('[AutoUpdate] Error:', err?.message);
+    });
+
+    // Check after a short delay to not block startup
+    setTimeout(() => {
+      try { autoUpdater.checkForUpdates(); } catch {}
+    }, 5000);
+    // Also check periodically (every 2 hours)
+    setInterval(() => {
+      try { autoUpdater.checkForUpdates(); } catch {}
+    }, 2 * 60 * 60 * 1000);
+    return;
+  }
+
+  // ─── Fallback: npm registry check (for npx users) ─────────────────────────
   https.get('https://registry.npmjs.org/reactoradar/latest', (res) => {
     let data = '';
     res.on('data', d => data += d);
@@ -161,20 +197,15 @@ function checkForUpdates() {
       try {
         const latest = JSON.parse(data).version;
         if (latest && _semverCompare(latest, currentVersion) > 0) {
-          // Send with retries to ensure renderer catches it after did-finish-load
-          const payload = { current: currentVersion, latest };
+          const payload = { current: currentVersion, latest, autoUpdate: false };
           [500, 2000, 5000].forEach(delay => {
-            setTimeout(() => {
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                _send('update-available', payload);
-              }
-            }, delay);
+            setTimeout(() => _send('update-available', payload), delay);
           });
           console.log(`[Update] New version available: ${latest} (current: ${currentVersion})`);
         }
       } catch {}
     });
-  }).on('error', () => {}); // Silently fail — update check is optional
+  }).on('error', () => {});
 }
 
 // ─── CDP DevTools Window (JS breakpoints, Sources, Console) ──────────────────
@@ -519,6 +550,27 @@ function setupIPC() {
   ipcMain.on('open-external', (_, url) => {
     if (url && typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
       shell.openExternal(url);
+    }
+  });
+
+  ipcMain.on('install-update', () => {
+    if (autoUpdater) {
+      autoUpdater.quitAndInstall(false, true);
+    }
+  });
+
+  ipcMain.on('capture-screenshot', async () => {
+    try {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      const image = await mainWindow.webContents.capturePage();
+      const png = image.toPNG();
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const filePath = path.join(app.getPath('downloads'), `ReactoRadar-${ts}.png`);
+      require('fs').writeFileSync(filePath, png);
+      shell.showItemInFolder(filePath);
+      console.log(`[Screenshot] Saved to ${filePath}`);
+    } catch (e) {
+      console.error('[Screenshot] Failed:', e.message);
     }
   });
 

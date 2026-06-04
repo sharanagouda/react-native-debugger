@@ -85,23 +85,79 @@ function detectPlatform() {
   const xcrun = tryExec('xcrun simctl list devices booted 2>/dev/null');
   const hasIOSSim = xcrun.includes('Booted');
 
-  return { hasAndroidEmu, hasAndroidDevice, hasIOSSim };
+  // Check if iOS real device is connected via USB
+  let hasIOSDevice = false;
+  // Method 1: idevice_id (from libimobiledevice — brew install libimobiledevice)
+  const idevice = tryExec('idevice_id -l 2>/dev/null');
+  if (idevice && idevice.trim().length > 0) hasIOSDevice = true;
+  // Method 2: system_profiler (slower but always available on macOS)
+  if (!hasIOSDevice) {
+    const profiler = tryExec('system_profiler SPUSBDataType 2>/dev/null');
+    if (profiler && (profiler.includes('iPhone') || profiler.includes('iPad'))) hasIOSDevice = true;
+  }
+
+  return { hasAndroidEmu, hasAndroidDevice, hasIOSSim, hasIOSDevice };
+}
+
+function getLanIP() {
+  // Get the Mac's LAN IP address for real device connections
+  const os = require('os');
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      // Skip internal/loopback and IPv6
+      if (iface.internal || iface.family !== 'IPv4') continue;
+      // Prefer en0 (Wi-Fi) or en1
+      if (iface.address && iface.address.startsWith('192.168.') || iface.address.startsWith('10.') || iface.address.startsWith('172.')) {
+        return iface.address;
+      }
+    }
+  }
+  return null;
 }
 
 function pickHost(platform) {
-  if (platform.hasIOSSim && !platform.hasAndroidEmu && !platform.hasAndroidDevice) {
-    return { host: '127.0.0.1', reason: 'iOS Simulator detected' };
+  const hasRealDevice = platform.hasAndroidDevice || platform.hasIOSDevice;
+  const hasSimOrEmu = platform.hasIOSSim || platform.hasAndroidEmu;
+
+  // Real device (iOS or Android) — needs LAN IP or adb reverse
+  if (platform.hasIOSDevice && !hasSimOrEmu) {
+    const lanIP = getLanIP();
+    if (lanIP) return { host: lanIP, reason: `iOS device detected via USB (LAN IP: ${lanIP})` };
+    return { host: '127.0.0.1', reason: 'iOS device detected but LAN IP not found — ensure Mac and device are on same WiFi' };
   }
-  if (platform.hasAndroidEmu && !platform.hasIOSSim) {
-    return { host: '10.0.2.2', reason: 'Android Emulator detected' };
-  }
-  if (platform.hasAndroidDevice) {
+  if (platform.hasAndroidDevice && !hasSimOrEmu) {
     return { host: '10.0.2.2', reason: 'Android device detected (using adb reverse)' };
   }
+
+  // Simulator/Emulator only
+  if (platform.hasIOSSim && !platform.hasAndroidEmu && !hasRealDevice) {
+    return { host: '127.0.0.1', reason: 'iOS Simulator detected' };
+  }
+  if (platform.hasAndroidEmu && !platform.hasIOSSim && !hasRealDevice) {
+    return { host: '10.0.2.2', reason: 'Android Emulator detected' };
+  }
+
+  // Mixed: real device + simulator/emulator
+  if (hasRealDevice && hasSimOrEmu) {
+    // If iOS device + iOS sim: prefer sim (127.0.0.1), user can switch for device
+    if (platform.hasIOSSim) {
+      return { host: '127.0.0.1', reason: 'iOS Sim + real device detected (defaulting to Sim — change HOST for device)' };
+    }
+    // Android device + emu: adb reverse handles both
+    return { host: '10.0.2.2', reason: 'Android Emu + device detected (adb reverse handles both)' };
+  }
+
+  // Both sim + emu
   if (platform.hasIOSSim && platform.hasAndroidEmu) {
     return { host: '127.0.0.1', reason: 'Both iOS Sim + Android Emu detected (defaulting to iOS, Android uses adb reverse)' };
   }
-  // Nothing running — default to localhost
+
+  // Nothing running — try to detect LAN IP for real device use later
+  const lanIP = getLanIP();
+  if (lanIP) {
+    return { host: '127.0.0.1', reason: `No running devices (default). For real device use HOST: ${lanIP}` };
+  }
   return { host: '127.0.0.1', reason: 'No running devices detected (default)' };
 }
 
@@ -421,6 +477,26 @@ ${SDK_MARKER_END}
     console.log(C.dim + '  Tip: If adb reverse drops, re-run:' + C.reset);
     console.log(C.dim + '    adb reverse tcp:9090 tcp:9090 && adb reverse tcp:9091 tcp:9091 && adb reverse tcp:9092 tcp:9092' + C.reset);
     console.log();
+  }
+  if (platform.hasIOSDevice) {
+    const lanIP = getLanIP();
+    console.log(C.bold + '  iOS Real Device:' + C.reset);
+    if (lanIP) {
+      console.log('    HOST is set to ' + C.cyan + lanIP + C.reset + ' (your Mac\'s LAN IP)');
+      console.log('    Ensure your device is on the ' + C.bold + 'same WiFi network' + C.reset + ' as this Mac');
+    } else {
+      console.log(C.yellow + '    Could not detect LAN IP. Manually set HOST in src/debug/RNDebugSDK.js' + C.reset);
+      console.log('    to your Mac\'s IP (e.g., 192.168.1.x). Find it with: ' + C.cyan + 'ifconfig en0' + C.reset);
+    }
+    console.log();
+  }
+  // Show LAN IP tip even when no device is connected (for future reference)
+  if (!platform.hasIOSDevice && !platform.hasAndroidDevice) {
+    const lanIP = getLanIP();
+    if (lanIP) {
+      console.log(C.dim + '  For real device debugging, change HOST in src/debug/RNDebugSDK.js to: ' + C.cyan + lanIP + C.reset);
+      console.log();
+    }
   }
   console.log(C.dim + '  To remove: npx reactoradar remove' + C.reset);
   console.log();

@@ -15,6 +15,10 @@
   <img src="https://img.shields.io/npm/v/reactoradar" alt="npm version" />
 </p>
 
+<p align="center">
+  <a href="https://razorpay.me/@reactoradar"><img src="https://img.shields.io/badge/Support-%E2%98%95%20Buy%20me%20a%20coffee-ff813f" alt="Support this project" /></a>
+</p>
+
 ---
 
 > The original [React Native Debugger](https://github.com/jhen0409/react-native-debugger) only supports the old Remote Debugger and doesn't work with Hermes / JSI / New Architecture. **ReactoRadar is the modern replacement** — built from scratch to work with the latest React Native versions.
@@ -26,28 +30,48 @@
   <img src="https://raw.githubusercontent.com/sharanagouda/react-native-debugger/main/screenshots/consoleLogs.png" alt="Console Panel" width="800" />
 </p>
 
-*Collapsible object trees, multi-select level filters (Log/Info/Warn/Error/Debug), search, right-click to copy*
+*Collapsible object trees, multi-select level filters, log grouping, search, export as JSON, right-click to copy*
 
 ### Network — Chrome DevTools-style Inspector
 <p align="center">
   <img src="https://raw.githubusercontent.com/sharanagouda/react-native-debugger/main/screenshots/networkLogs.png" alt="Network Panel" width="800" />
 </p>
 
-*Resizable/sortable columns, request/response detail with collapsible trees, Copy as cURL, throttling*
+*Resizable/sortable columns, slow API highlights, export as HAR, stats bar, hide unwanted URLs, throttling*
 
 ## Features
 
 | Tab | What it does |
 |---|---|
-| **Console** | Log viewer with collapsible object trees, multi-select level dropdown (persists across restarts), search filter |
-| **Network** | Chrome DevTools-style inspector — resizable/sortable columns (Name, Status, Type, Initiator, Size, Time, Waterfall), search, type filters (Fetch/XHR, JS, CSS, Img, Media, Font, Doc, WS), throttling (Fast 3G / Slow 3G / Offline), Copy as cURL, request/response as collapsible trees |
-| **Redux** | Scrollable action list with time travel, prev/current/next actions, payload trees, store diff showing changed keys with old → new values |
-| **GA4 Events** | Firebase Analytics inspector — intercepts ALL `log*` and `set*` methods on `@react-native-firebase/analytics`, event list with time + name, detail pane with all parameters as key-value trees, summary chips (click to filter), sort by time |
+| **Console** | Log viewer with collapsible trees, level filters, log grouping (repeated messages), search, export as JSON |
+| **Network** | Chrome DevTools-style inspector — resizable/sortable columns, slow API highlighting (>1s orange, >3s red), status filters (All/2xx/Errors/Slow), export as HAR, hide unwanted URLs, stats bar, throttling, Copy as cURL |
+| **Redux** | Action list with category color coding, click to expand payload + two-column store diff (Previous \| Current) with changed keys highlighted, time travel |
+| **GA4 Events** | Firebase Analytics inspector — intercepts ALL `log*` and `set*` methods, event list with detail pane, summary chips |
 | **App** | AsyncStorage live key/value browser with search |
 | **Memory** | JS Heap Used/Total, Native Memory from Hermes runtime |
 | **Performance** | Live FPS meter, JS Thread timing, UI Thread timing with sparkline graphs |
 | **React** | Component tree and props inspector via `react-devtools-core` relay |
-| **Settings** | 9 color themes (Dark, Light, Monokai, Dracula, Solarized Dark/Light, Nord, GitHub Dark, One Dark), font size controls, custom app name, how-to-use guide, auto-update notification |
+| **Settings** | 9 color themes, font family/size, configurable panel visibility with drag-to-reorder, Metro port config, keyboard shortcuts, auto-update, support link |
+
+### What's New in v1.6.0
+
+- **Auto-Update** — `.dmg` builds auto-download updates from GitHub Releases. Settings shows "Restart & Update" when ready.
+- **Keyboard Shortcuts** — `Cmd+1–9` switch panels, `Cmd+K` clear, `Cmd+S` screenshot, `Cmd+F` find
+- **Toast Notifications** — Non-intrusive alerts for console errors, API errors (4xx/5xx), and slow APIs (>3s) when you're on a different tab. Duplicate toasts are grouped with count.
+- **Console Log Grouping** — Repeated identical consecutive messages show a count badge instead of duplicates
+- **Export** — Console logs as JSON, Network requests as HAR 1.2 (importable into Chrome DevTools, Charles, etc.)
+- **Network Stats Bar** — `47 requests | Avg: 320ms | Slowest: 4.2s (products) | Errors: 2 | Slow: 5`
+- **Slow API Highlights** — Rows >1s turn orange, >3s turn red (background, path, time column)
+- **Status Filters** — All / 2xx / Errors / Slow (>1s) filter buttons
+- **Hide URLs** — Right-click any request → "Hide this URL". Manage hidden URLs with the "Hidden (N)" dropdown.
+- **Redux Category Colors** — Action types like `ANALYTICS/TRACK_EVENT` show category prefix in a unique color
+- **Two-Column Redux Diff** — Store changes show Previous and Current state side-by-side, trees collapsed by default, changed keys highlighted
+- **Panel Visibility** — Settings > Panels: show/hide tabs and drag to reorder. Disabled tabs stop processing data to save memory.
+- **Font Family** — Choose from SF Mono, Menlo, Monaco, Courier New, System Mono
+- **Screenshot** — Camera button in titlebar or `Cmd+S` — saves PNG to Downloads
+- **Memory Safeguards** — Auto-caps console (5K logs), network (1K requests), Redux (500 states). Warning banner at 70% heap usage.
+- **Real Device Support** — iOS real device auto-detects LAN IP. Android uses adb reverse.
+- **Debugger Detection** — SDK auto-pauses when Chrome DevTools or Hermes Inspector attaches, resumes on disconnect
 
 ## Installation
 
@@ -66,7 +90,7 @@ npx reactoradar            # Launch the debugger
 3. Install the SDK: `npx reactoradar setup` from your RN project
 4. Open ReactoRadar from Applications
 
-> **macOS Gatekeeper**: First launch → right-click → Open → Open. Or: `xattr -cr "/Applications/ReactoRadar.app"`
+> **macOS Gatekeeper**: First launch — right-click → Open → Open. Or: `xattr -cr "/Applications/ReactoRadar.app"`
 
 ### Option C: Global install
 
@@ -101,6 +125,17 @@ npx react-native start --reset-cache
 
 Console, Network, Redux, GA4, AsyncStorage data flows automatically. No config needed.
 
+### Real Device Setup
+
+| Device | HOST | How it connects |
+|--------|------|-----------------|
+| iOS Simulator | `127.0.0.1` | Shares Mac's network (auto-detected) |
+| Android Emulator | `10.0.2.2` | Special host alias (auto-detected) |
+| Android real device (USB) | `10.0.2.2` | `adb reverse` tunnels over USB (auto-configured) |
+| iOS real device (USB/WiFi) | Mac's LAN IP | Auto-detected. Device must be on same WiFi as Mac. |
+
+`npx reactoradar setup` auto-detects your platform and sets the correct HOST.
+
 ### Uninstall
 
 ```bash
@@ -111,7 +146,7 @@ npx reactoradar remove
 
 | ReactoRadar | React Native | Engine | Architecture |
 |---|---|---|---|
-| v1.3+ | 0.74 — 0.81+ | Hermes | Old & New Architecture |
+| v1.6+ | 0.74 — 0.81+ | Hermes | Old & New Architecture |
 
 ## Network Inspector
 
@@ -120,30 +155,35 @@ npx reactoradar remove
 | **Columns** | Name, Status, Type, Initiator, Size, Time, Waterfall — resizable and sortable |
 | **Search** | Filter by URL in real time |
 | **Type filters** | All, Fetch/XHR, JS, CSS, Img, Media, Font, Doc, WS |
+| **Status filters** | All, 2xx, Errors, Slow (>1s) |
+| **Slow API highlights** | >1s orange background + bold time, >3s red |
+| **Stats bar** | Total requests, Avg duration, Slowest endpoint, Error count, Slow count |
+| **Hide URLs** | Right-click → Hide this URL. Manage via "Hidden (N)" dropdown. Persists across sessions. |
+| **Export** | Export as HAR 1.2 — importable into Chrome DevTools, Charles Proxy |
 | **Throttling** | No throttling, Fast 3G (500ms), Slow 3G (2s), Offline |
 | **Detail view** | Click row → Headers / Request / Preview / Response side panel |
-| **Copy as cURL** | Right-click → Copy as cURL / Copy URL / Copy Response |
-| **Request body** | Collapsible object tree (not raw JSON) |
+| **Copy as cURL** | Right-click → Copy as cURL / Copy URL / Copy Response / Hide this URL |
 | **Capture toggle** | ON/OFF switch to pause network capture |
 
 ## GA4 Event Inspector
 
 | Feature | Details |
 |---|---|
-| **Auto-intercept** | Patches ALL `log*` and `set*` methods on Firebase Analytics prototype — no hardcoded list, catches current + future methods |
+| **Auto-intercept** | Patches ALL `log*` and `set*` methods on Firebase Analytics prototype |
 | **Event list** | Time + event name, newest first, sortable |
-| **Detail pane** | All parameters as key-value list with collapsible trees for objects/arrays |
-| **Summary chips** | Click any chip to filter by that event type, click again to clear |
-| **Resizable** | Drag the divider between list and detail |
-| **Supported methods** | `logEvent`, `logPurchase`, `logAddToCart`, `logViewItem`, `logScreenView`, `logSelectPromotion`, `logViewPromotion`, `setUserId`, `setUserProperty`, `setConsent`, and 30+ more |
+| **Detail pane** | All parameters as key-value list with word-wrapped long values |
+| **Summary chips** | Click any chip to filter by event type |
 
 ## Redux DevTools
 
-- Scrollable action list with search filter
-- Click an action → shows Previous / Current / Next with payloads as collapsible trees
-- Store diff for current action: shows each changed key with **- old value** and **+ new value**
-- Deep equality comparison (no false positives from reference changes)
+- Action list with category color coding (e.g., `ANALYTICS/` in blue, `CART/` in green)
+- Click to expand, click again to collapse. Close button on expanded detail.
+- **Two-column store diff**: Previous (red) and Current (green) side-by-side with changed keys highlighted
+- Trees collapsed by default — user expands what they need
+- Right-click to copy action type or payload
+- Deep equality comparison (no false positives)
 - Time travel with ◀ ▶ navigation
+- Memory capped at 500 action/state pairs
 
 ### Redux Setup
 
@@ -169,21 +209,35 @@ import { reduxEnhancer } from '../debug/RNDebugSDK';
 const store = createStore(reducer, __DEV__ ? reduxEnhancer : undefined);
 ```
 
-> **Note:** The import path is relative from your store file to `src/debug/RNDebugSDK`. Adjust if your store is in a different directory. Run `npx reactoradar setup` to auto-detect the correct path.
+> **Note:** The import path is relative from your store file to `src/debug/RNDebugSDK`. Run `npx reactoradar setup` to auto-detect the correct path.
 
-## Themes
+## Settings
 
-9 built-in themes: **Dark** (default), **Light**, **Monokai**, **Dracula**, **Solarized Dark**, **Solarized Light**, **Nord**, **GitHub Dark**, **One Dark**
+### Appearance
+- **9 Themes**: Dark, Light, Monokai, Dracula, Solarized Dark/Light, Nord, GitHub Dark, One Dark
+- **Font Family**: SF Mono, Menlo, Monaco, Courier New, System Mono
+- **Font Size**: Adjustable with A-/A+ buttons
+- **App Name**: Customizable titlebar text
 
-All 16 CSS variables change per theme — every element in the app updates including text, backgrounds, borders, syntax highlighting, badges, and graphs.
+### Panel Management
+- **Show/Hide Tabs**: Toggle visibility of any tab (Console and Network are required)
+- **Drag to Reorder**: Drag tabs to change sidebar order
+- **Memory Saving**: Disabled tabs stop processing data entirely
+
+### Connection
+- **Metro Port**: Configurable (default 8081) for multi-bundler setups
+- **Bridge Ports**: Redux :9090, Storage :9091, Network :9092
 
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
 |---|---|
+| `Cmd+1–9` | Switch panels (follows custom order) |
+| `Cmd+K` | Clear active panel |
+| `Cmd+S` | Screenshot (saves to Downloads) |
+| `Cmd+F` | Find/Search in active panel |
 | `Cmd+D` | Open JS Debugger (CDP DevTools) |
 | `Cmd+R` | Open React DevTools |
-| `Cmd+K` | Clear all panels |
 | `Cmd+Shift+T` | Cycle through themes |
 | `Cmd+C/V/A` | Copy / Paste / Select All |
 
@@ -195,7 +249,7 @@ All 16 CSS variables change per theme — every element in the app updates inclu
 | 9091 | AsyncStorage bridge |
 | 9092 | Console + Network + GA4 + Performance bridge |
 | 8097 | React DevTools relay |
-| 8081 | Metro bundler (CDP) |
+| 8081 | Metro bundler (CDP) — configurable in Settings |
 
 ## Architecture
 
@@ -212,6 +266,8 @@ All 16 CSS variables change per theme — every element in the app updates inclu
 │   ├─ WS :9091 ← asyncstorage                       │
 │   ├─ WS :8097 ← react-devtools relay               │
 │   └─ HTTP :8081 → Metro CDP (on-demand)             │
+│                                                     │
+│  Auto-update via electron-updater (GitHub Releases) │
 └──────────────────────┬──────────────────────────────┘
                        │ WebSocket
 ┌──────────────────────┴──────────────────────────────┐
@@ -222,8 +278,9 @@ All 16 CSS variables change per theme — every element in the app updates inclu
 │   ├─ XHR constructor wrapper (axios + fetch)        │
 │   ├─ Firebase Analytics prototype interceptor       │
 │   ├─ FPS + memory metrics                           │
-│   ├─ Redux middleware                               │
-│   └─ AsyncStorage watcher                           │
+│   ├─ Redux middleware / enhancer                    │
+│   ├─ AsyncStorage watcher                           │
+│   └─ Debugger detection (auto-pause on CDP attach)  │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -234,13 +291,23 @@ All 16 CSS variables change per theme — every element in the app updates inclu
 | App won't launch from VS Code terminal | `unset ELECTRON_RUN_AS_NODE && npx reactoradar` |
 | "Waiting for device" | Restart Metro: `npx react-native start --reset-cache` |
 | Network tab empty | Run Metro with `--reset-cache` |
+| Blank screen after long use | Click "Clear All Data" on the memory warning banner, or restart the app |
+| Redux shows "No actions dispatched" | Verify `reduxMiddleware` is wired in your store. Run `npx reactoradar setup` to auto-detect. |
+| Real device not connecting | Ensure HOST in `src/debug/RNDebugSDK.js` matches your Mac's LAN IP. Re-run `npx reactoradar setup`. |
 | `XHRInterceptor.js` warning | Set `networking: false` in ReactotronConfig.js |
 | GA4 events not showing | Restart Metro with `--reset-cache` after setup |
-| Port conflict | Change ports in `main.js` and `RNDebugSDK.js` |
+| Port conflict | Run `kill $(lsof -ti :9092)` to free the port, then restart |
+| "ReactoRadar is already running" | Close the existing instance or kill the process |
 
 ## Privacy
 
 ReactoRadar runs entirely on your local machine. No data collection, no analytics, no telemetry. See [PRIVACY.md](./PRIVACY.md).
+
+## Support
+
+If ReactoRadar helps your workflow, consider supporting development:
+
+<a href="https://razorpay.me/@reactoradar"><img src="https://img.shields.io/badge/Support-%E2%98%95%20Buy%20me%20a%20coffee-ff813f?style=for-the-badge" alt="Support this project" /></a>
 
 ## Contributing
 
@@ -255,8 +322,9 @@ npm start
 
 ### Ideas for contribution
 - Windows / Linux support
-- Source file browser with breakpoints
-- Flipper plugin compatibility
+- WebSocket message inspector
+- Network request comparison (diff two requests)
+- Session recording & replay
 - Custom themes
 - React Native New Architecture profiling
 
@@ -266,6 +334,10 @@ npm start
 - [React DevTools](https://github.com/facebook/react/tree/main/packages/react-devtools)
 - [Redux DevTools](https://github.com/reduxjs/redux-devtools)
 - [React Native Debugger](https://github.com/jhen0409/react-native-debugger) — the original inspiration
+
+## Author
+
+**Sharanagouda M K** — [LinkedIn](https://www.linkedin.com/in/sharanagoudamk/) · [GitHub](https://github.com/sharanagouda)
 
 ## License
 

@@ -1,7 +1,7 @@
 {
   "name": "reactoradar",
   "productName": "ReactoRadar",
-  "version": "1.5.10",
+  "version": "1.6.0",
   "description": "macOS debugger for React Native — Console, Sources, Network, Performance, Memory, Redux, AsyncStorage, React tree. Supports RN 0.74+ with Hermes and New Architecture.",
   "main": "main.js",
   "bin": {
@@ -50,6 +50,7 @@
     "pack": "electron-builder --mac --dir"
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "react-devtools-core": "^5.3.1",
     "ws": "^8.17.0"
   },
@@ -59,8 +60,15 @@
     "electron-devtools-installer": "^3.2.0"
   },
   "build": {
-    "appId": "com.yourteam.rn-debugger",
+    "appId": "com.reactoradar.app",
     "productName": "ReactoRadar",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "sharanagouda",
+        "repo": "react-native-debugger"
+      }
+    ],
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "ReactoRadar.icns",
