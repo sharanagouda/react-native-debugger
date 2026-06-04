@@ -417,17 +417,32 @@ function setupIPC() {
   ipcMain.on('open-react-devtools', () => {
     // Start the relay server if not already running
     if (!reactDTServer) startReactDevToolsServer();
-    // Open standalone react-devtools window
-    const rdtWin = new BrowserWindow({
-      width: 1100,
-      height: 700,
-      titleBarStyle: 'hiddenInset',
-      backgroundColor: '#0a0b0e',
-      title: 'React DevTools',
-      webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
-    });
-    // Metro serves the React DevTools frontend at /debugger-ui
-    rdtWin.loadURL(`http://localhost:${PORTS.METRO}/debugger-ui`);
+    // Launch standalone react-devtools via npx in a background process
+    try {
+      const { spawn } = require('child_process');
+      const env = { ...process.env };
+      // Remove ELECTRON_RUN_AS_NODE to prevent npx from running in Electron's Node
+      delete env.ELECTRON_RUN_AS_NODE;
+      const child = spawn('npx', ['react-devtools'], {
+        stdio: 'ignore',
+        detached: true,
+        env,
+      });
+      child.unref();
+      console.log('[ReactDevTools] Launched standalone react-devtools');
+      _send('react-dt-status', 'launched');
+    } catch (e) {
+      console.error('[ReactDevTools] Failed to launch:', e.message);
+      // Fallback: show instructions in a dialog
+      const { dialog } = require('electron');
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'React DevTools',
+        message: 'Could not launch React DevTools automatically.',
+        detail: 'Run this command in your terminal:\n\nnpx react-devtools\n\nIt will connect to your app on port 8097.',
+        buttons: ['OK'],
+      });
+    }
   });
 
   // clear-all is handled by renderer via clear-all-ui IPC from menu
