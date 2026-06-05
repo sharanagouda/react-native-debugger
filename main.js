@@ -20,6 +20,7 @@ const PORTS = {
 // ─── Windows ──────────────────────────────────────────────────────────────────
 let mainWindow = null;
 let devtoolsWindow = null;  // hosts the embedded CDP DevTools frontend
+let _forceQuit = false;
 
 // Safe IPC send — prevents "Object has been destroyed" crash
 function _send(channel, ...args) {
@@ -76,14 +77,12 @@ if (gotLock) app.whenReady().then(async () => {
   // Send version to renderer — try package.json, fallback to app.getVersion()
   let appVersion;
   try { appVersion = require('./package.json').version; } catch { appVersion = app.getVersion(); }
-  // Send multiple times to ensure renderer catches it
+  // Send multiple times to ensure renderer catches it (covers race conditions)
   mainWindow.webContents.on('did-finish-load', () => {
-    [200, 1000, 3000].forEach(delay => {
-      setTimeout(() => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          _send('app-version', appVersion);
-        }
-      }, delay);
+    // Send immediately + retries
+    _send('app-version', appVersion);
+    [500, 2000, 5000].forEach(delay => {
+      setTimeout(() => _send('app-version', appVersion), delay);
     });
   });
 
@@ -102,6 +101,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  _forceQuit = true;
   // Close all WS servers gracefully
   if (reactDTServer) {
     reactDTServer.close();
@@ -138,6 +138,26 @@ async function createMainWindow() {
   // Open the JS Debugger panel (CDP DevTools) in a second window
   mainWindow.webContents.on('did-finish-load', () => {
     _send('ports', PORTS);
+  });
+
+  // Close confirmation dialog
+  mainWindow.on('close', (e) => {
+    if (_forceQuit) return;
+    e.preventDefault();
+    dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['Quit', 'Cancel'],
+      defaultId: 1,
+      title: 'Close ReactoRadar',
+      message: 'Are you sure you want to quit?',
+      detail: 'Active debug sessions will be disconnected.',
+    }).then(({ response }) => {
+      if (response === 0) {
+        _forceQuit = true;
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+        app.quit();
+      }
+    });
   });
 }
 
@@ -588,6 +608,143 @@ function setupIPC() {
       console.error('[Screenshot] Failed:', e.message);
     }
   });
+
+  // ─── Native Log Streaming ──────────────────────────────────────────────────
+  let _nativeLogProcess = null;
+
+  // Auto-detect which native platform is available
+  ipcMain.handle('detect-native-platform', () => {
+    const { execSync } = require('child_process');
+    function tryCmd(cmd) { try { return execSync(cmd, { encoding: 'utf8', stdio: ['pipe','pipe','pipe'], timeout: 5000 }).trim(); } catch { return ''; } }
+
+    const result = { android: false, iosSim: false, iosDevice: false, adbPath: false };
+
+    // Check adb
+    const adbCheck = tryCmd('which adb');
+    result.adbPath = !!adbCheck;
+    if (adbCheck) {
+      const devices = tryCmd('adb devices');
+      result.android = devices.includes('emulator') || /\b[A-Z0-9]{6,}\s+device\b/i.test(devices);
+    }
+
+    // Check iOS simulator
+    const simCheck = tryCmd('xcrun simctl list devices booted 2>/dev/null');
+    result.iosSim = simCheck.includes('Booted');
+
+    // Check iOS device
+    const idevice = tryCmd('idevice_id -l 2>/dev/null');
+    result.iosDevice = !!(idevice && idevice.trim().length > 0);
+
+    return result;
+  });
+
+  ipcMain.on('start-native-logs', (_, platform) => {
+    // Kill existing process group
+    if (_nativeLogProcess) {
+      try { process.kill(-_nativeLogProcess.pid); } catch {}
+      try { _nativeLogProcess.kill(); } catch {}
+      _nativeLogProcess = null;
+    }
+
+    const { spawn } = require('child_process');
+    let cmd, args;
+
+    if (platform === 'android') {
+      // adb logcat — filter for app-relevant logs
+      cmd = 'adb';
+      args = ['logcat', '-v', 'threadtime', '*:W']; // Warnings and above
+    } else if (platform === 'ios-sim') {
+      // xcrun simctl for iOS Simulator — use syslog style for parseable output
+      cmd = 'xcrun';
+      args = ['simctl', 'spawn', 'booted', 'log', 'stream', '--style', 'syslog', '--level', 'error'];
+    } else if (platform === 'ios-device') {
+      // idevicesyslog for real iOS device
+      cmd = 'idevicesyslog';
+      args = [];
+    } else {
+      _send('native-status', { connected: false, error: `Unknown platform: ${platform}` });
+      return;
+    }
+
+    try {
+      _nativeLogProcess = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+
+      _send('native-status', { connected: true, platform });
+
+      let buffer = '';
+      _nativeLogProcess.stdout.on('data', (chunk) => {
+        buffer += chunk.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep incomplete line
+        lines.forEach(line => {
+          if (!line.trim()) return;
+          const parsed = _parseNativeLog(line, platform);
+          if (parsed) _send('native-log', parsed);
+        });
+      });
+
+      _nativeLogProcess.stderr.on('data', (chunk) => {
+        const text = chunk.toString().trim();
+        if (text) _send('native-log', { level: 'error', message: text, source: 'stderr', ts: Date.now() });
+      });
+
+      _nativeLogProcess.on('close', (code) => {
+        _nativeLogProcess = null;
+        _send('native-status', { connected: false, error: code ? `Process exited with code ${code}` : 'Disconnected' });
+      });
+
+      _nativeLogProcess.on('error', (err) => {
+        _nativeLogProcess = null;
+        _send('native-status', { connected: false, error: `Failed to start ${cmd}: ${err.message}. Is it installed?` });
+      });
+
+    } catch (e) {
+      _send('native-status', { connected: false, error: e.message });
+    }
+  });
+
+  ipcMain.on('stop-native-logs', () => {
+    if (_nativeLogProcess) {
+      try { _nativeLogProcess.kill(); } catch {}
+      _nativeLogProcess = null;
+      _send('native-status', { connected: false });
+    }
+  });
+
+  // Clean up on quit
+  app.on('before-quit', () => {
+    if (_nativeLogProcess) { try { _nativeLogProcess.kill(); } catch {} }
+  });
+
+  function _parseNativeLog(line, platform) {
+    if (platform === 'android') {
+      // Android logcat format: "06-05 10:30:45.123  1234  5678 E TAG: message"
+      const m = line.match(/^\d{2}-\d{2}\s+(\d{2}:\d{2}:\d{2})\.\d+\s+\d+\s+\d+\s+([VDIWEF])\s+([^:]+):\s*(.*)/);
+      if (m) {
+        const levelMap = { V: 'verbose', D: 'debug', I: 'info', W: 'warn', E: 'error', F: 'fatal' };
+        return { ts: Date.now(), time: m[1], level: levelMap[m[2]] || 'info', tag: m[3].trim(), message: m[4], raw: line };
+      }
+      return { ts: Date.now(), level: 'info', message: line, raw: line };
+    }
+    if (platform === 'ios-sim' || platform === 'ios-device') {
+      // syslog style: "2026-06-05 10:30:45.123456+0530  localhost process[pid]: (subsystem) [category] <Level>: message"
+      const m1 = line.match(/(\d{2}:\d{2}:\d{2})\.\d+[^\s]*\s+\S+\s+(\S+)\[\d+\].*?<(\w+)>:\s*(.*)/);
+      if (m1) {
+        const levelMap = { Notice: 'info', Info: 'info', Default: 'info', Debug: 'debug', Error: 'error', Fault: 'fatal' };
+        return { ts: Date.now(), time: m1[1], level: levelMap[m1[3]] || 'info', tag: m1[2], message: m1[4], raw: line };
+      }
+      // idevicesyslog format: "Jun  5 10:30:45 iPhone MyApp(libsystem)[123] <Error>: message"
+      const m2 = line.match(/\w+\s+\d+\s+(\d{2}:\d{2}:\d{2})\s+\S+\s+(\S+?)[\[(].*?<(\w+)>:\s*(.*)/);
+      if (m2) {
+        const levelMap = { Notice: 'info', Info: 'info', Debug: 'debug', Warning: 'warn', Error: 'error', Critical: 'fatal' };
+        return { ts: Date.now(), time: m2[1], level: levelMap[m2[3]] || 'info', tag: m2[2], message: m2[4], raw: line };
+      }
+      // Fallback
+      const timeMatch = line.match(/(\d{2}:\d{2}:\d{2})/);
+      return { ts: Date.now(), time: timeMatch ? timeMatch[1] : '', level: 'info', message: line, raw: line };
+    }
+    return { ts: Date.now(), level: 'info', message: line, raw: line };
+  }
 
   ipcMain.on('set-theme', (_, theme) => {
     nativeTheme.themeSource = theme === 'light' ? 'light' : 'dark';

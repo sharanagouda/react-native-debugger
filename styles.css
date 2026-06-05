@@ -1039,7 +1039,9 @@ body {
 /* ─────────────────────────────────────────────────────────────────────────────
    ASYNC STORAGE PANEL
 ───────────────────────────────────────────────────────────────────────────── */
-.storage-layout { display: grid; grid-template-columns: 240px 1fr; height: 100%; }
+.storage-layout { display: grid; grid-template-columns: 240px 4px 1fr; height: 100%; }
+.storage-resize-handle { background: var(--border); cursor: col-resize; transition: background 0.1s; }
+.storage-resize-handle:hover { background: var(--accent); }
 .storage-keys { display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; }
 .storage-keys-list { flex: 1; overflow-y: auto; }
 .storage-keys-list::-webkit-scrollbar { width: 3px; }
@@ -1636,6 +1638,49 @@ mark { background: rgba(79,172,255,.2); color: var(--accent); border-radius: 2px
 .net-hidden-url { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-mid); }
 .net-hidden-unhide { font-size: 9px; background: transparent; border: 1px solid var(--border); color: var(--accent); border-radius: 3px; padding: 2px 6px; cursor: pointer; flex-shrink: 0; }
 .net-hidden-unhide:hover { background: rgba(61,136,255,.1); }
+
+/* ── Native Logs Panel ─────────────────────────────────────────────────────── */
+.native-connect-panel { flex: 1; display: flex; align-items: center; justify-content: center; overflow-y: auto; padding: 24px; }
+.native-hero { text-align: center; max-width: 520px; width: 100%; }
+.native-platform-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+.native-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; text-align: left; display: flex; flex-direction: column; }
+.native-card-icon { font-size: 22px; margin-bottom: 8px; }
+.native-card-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.native-card-hint { font-size: 10px; color: var(--text-dim); margin-bottom: 12px; }
+.native-card-hint code { background: var(--bg3); padding: 1px 4px; border-radius: 3px; color: var(--accent); }
+.native-card-prereq { font-size: 10px; color: var(--text-mid); line-height: 1.8; flex: 1; }
+.native-prereq-step { margin-bottom: 3px; padding-left: 4px; }
+.native-prereq-step code { background: var(--bg3); padding: 1px 4px; border-radius: 3px; color: var(--accent); font-size: 10px; }
+.native-connect-btn { margin-top: 12px; padding: 7px 18px; border-radius: 6px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.12s; }
+.native-connect-btn:hover { background: var(--accent); color: #fff; }
+.native-status { font-size: 10px; color: var(--text-dim); }
+.native-logs-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.native-filter-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--bg2); }
+.native-level-filters { display: flex; gap: 4px; }
+.native-log-list { flex: 1; overflow-y: auto; font-size: 11px; line-height: 1.5; }
+.native-log-row { display: flex; gap: 8px; padding: 3px 12px; border-bottom: 1px solid var(--border); font-family: inherit; align-items: baseline; }
+.native-log-row:hover { background: var(--bg3); }
+.native-log-time { color: var(--text-dim); font-size: 10px; flex-shrink: 0; width: 65px; }
+.native-log-level { font-size: 9px; font-weight: 700; flex-shrink: 0; width: 42px; text-align: center; padding: 1px 0; border-radius: 3px; }
+.native-log-tag { color: var(--accent); font-size: 10px; font-weight: 600; flex-shrink: 0; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.native-log-header { display: flex; gap: 8px; align-items: baseline; }
+.native-log-preview { color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.native-log-full { display: none; padding: 6px 12px 8px 85px; font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: var(--text); background: var(--bg2); border-top: 1px solid var(--border); user-select: text; -webkit-user-select: text; }
+.native-log-row.expanded { background: var(--bg2); }
+.native-log-row.expanded .native-log-preview { white-space: normal; }
+.native-error .native-log-full, .native-fatal .native-log-full { color: var(--red); }
+.native-detect-status { font-size: 10px; margin: 8px 0 4px; min-height: 14px; }
+.native-verbose .native-log-level { color: var(--text-dim); background: var(--bg3); }
+.native-debug .native-log-level { color: var(--text-mid); background: var(--bg3); }
+.native-info .native-log-level { color: var(--green); background: rgba(61,214,140,.1); }
+.native-warn .native-log-level { color: var(--orange); background: rgba(255,165,0,.1); }
+.native-warn { background: rgba(255,165,0,.03); }
+.native-error .native-log-level { color: var(--red); background: rgba(255,94,114,.1); }
+.native-error { background: rgba(255,94,114,.04); }
+.native-error .native-log-msg { color: var(--red); }
+.native-fatal .native-log-level { color: #fff; background: var(--red); }
+.native-fatal { background: rgba(255,94,114,.08); }
+.native-fatal .native-log-msg { color: var(--red); font-weight: 700; }
 
 /* ── Support Button ────────────────────────────────────────────────────────── */
 .support-btn { background: linear-gradient(135deg, #ff813f, #ff5e72); color: #fff; border: none; padding: 8px 20px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.15s; letter-spacing: 0.3px; }

@@ -203,6 +203,7 @@ function clearActiveTab() {
 function clearAll() {
   state.console.logs = [];
   _consolePending = [];
+  _lastLogMsg = ''; _lastLogRow = null; _lastLogCount = 1;
   state.network.requests = {};
   state.network.order = [];
   state.network.selectedId = null;
@@ -213,14 +214,31 @@ function clearAll() {
   state.storage.entries = {};
   state.storage.keys = [];
   state.storage.selected = null;
+  // GA4
+  ga4State.events = [];
+  ga4State.selected = -1;
+  ga4State.searchFilter = '';
+  const ga4Search = $('ga4Search');
+  if (ga4Search) ga4Search.value = '';
+  const ga4Detail = $('ga4Detail');
+  if (ga4Detail) ga4Detail.innerHTML = '';
+  // Native logs
+  _nativeState.logs = [];
+  const nativeList = $('nativeLogList');
+  if (nativeList) nativeList.innerHTML = '';
+  // Badges
   $('cBadge').textContent = '0';
   $('nBadge').textContent = '0';
   $('rBadge').textContent = '0';
   $('sBadge').textContent = '0';
+  if ($('ga4Badge')) $('ga4Badge').textContent = '0';
+  if ($('nativeBadge')) $('nativeBadge').textContent = '0';
+  // Re-render all
   renderConsole();
   renderNetwork();
   renderRedux();
   renderStorage();
+  if (typeof renderGA4List === 'function') { renderGA4List(); renderGA4Summary(); }
 }
 
 // ─── CDP Button ───────────────────────────────────────────────────────────────
@@ -658,6 +676,10 @@ const MAX_CONSOLE_LOGS = 5000;
 
 function addConsoleLog(event) {
   state.console.logs.push(event);
+  // Cap in-memory logs to prevent memory leak
+  if (state.console.logs.length > MAX_CONSOLE_LOGS) {
+    state.console.logs = state.console.logs.slice(-MAX_CONSOLE_LOGS);
+  }
   _consolePending.push(event);
 
   // Batch DOM updates via rAF — only one paint per frame
@@ -2038,9 +2060,15 @@ function initGA4Panel() {
   $('ga4Clear').addEventListener('click', () => {
     ga4State.events = [];
     ga4State.selected = -1;
+    ga4State.searchFilter = '';
+    const search = $('ga4Search');
+    if (search) search.value = '';
     $('ga4Badge').textContent = '0';
     renderGA4List();
     renderGA4Summary();
+    // Clear detail pane
+    const detail = $('ga4Detail');
+    if (detail) detail.innerHTML = '<div class="ga4-detail-empty" style="color:var(--text-dim);padding:20px;text-align:center;font-size:11px">Select an event to view details</div>';
   });
 
   $('ga4SortBtn').addEventListener('click', () => {
@@ -2154,7 +2182,7 @@ function renderGA4List() {
     const row = document.createElement('div');
     row.className = 'ga4-row' + (e.index === ga4State.selected ? ' selected' : '');
 
-    const time = new Date(e.ts).toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
+    const time = new Date(e.ts).toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
     const evtColor = _ga4EventColor(e.name);
     const colorStyle = evtColor ? `color:${evtColor}` : '';
@@ -2184,12 +2212,15 @@ function renderGA4List() {
 }
 
 function renderGA4Detail(e) {
-  const detail = $('ga4Detail');
+  let detail = $('ga4Detail');
   if (!detail) return;
 
-  const time = new Date(e.ts).toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
+  const time = new Date(e.ts).toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-  detail.innerHTML = '';
+  // Clone-replace to remove stale event listeners
+  const fresh = detail.cloneNode(false);
+  detail.parentNode.replaceChild(fresh, detail);
+  detail = fresh;
 
   // Header info
   const header = document.createElement('div');
@@ -2748,8 +2779,8 @@ function initStoragePanel() {
         <input id="storageSearch" class="net-search-input" placeholder="Filter keys..." />
       </div>
     </div>
-    <div class="storage-layout">
-      <div class="storage-keys">
+    <div class="storage-layout" id="storageLayout">
+      <div class="storage-keys" id="storageKeysPane">
         <div class="panel-toolbar" style="height:32px">
           <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Keys</span>
         </div>
@@ -2757,10 +2788,11 @@ function initStoragePanel() {
           <div class="empty-state" id="storageEmpty">
             <div class="icon">💾</div>
             <div class="label">No storage data</div>
-            <div class="hint">Add storage plugin to RNDebugPlugin</div>
+            <div class="hint">AsyncStorage data will appear here</div>
           </div>
         </div>
       </div>
+      <div class="storage-resize-handle" id="storageResizeHandle"></div>
       <div class="storage-value-view">
         <div class="storage-value-toolbar">
           <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Value</span>
@@ -2776,6 +2808,35 @@ function initStoragePanel() {
     state.storage.searchFilter = e.target.value.toLowerCase().trim();
     renderStorage();
   });
+
+  // Drag resize handle for key list width
+  const handle = $('storageResizeHandle');
+  const layout = $('storageLayout');
+  const keysPane = $('storageKeysPane');
+  if (handle && layout && keysPane) {
+    let dragging = false;
+    let startX = 0;
+    let startW = 0;
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      dragging = true;
+      startX = e.clientX;
+      startW = keysPane.offsetWidth;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const newW = Math.max(120, Math.min(600, startW + (e.clientX - startX)));
+      layout.style.gridTemplateColumns = `${newW}px 4px 1fr`;
+    });
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    });
+  }
 }
 
 let _storageRAF = null;
@@ -2851,7 +2912,7 @@ function renderStorage() {
 }
 
 function renderStorageValue() {
-  const body = $('storageValueBody');
+  let body = $('storageValueBody');
   const keyLabel = $('storageSelectedKey');
   if (!body) return;
   const { selected, entries } = state.storage;
@@ -2861,7 +2922,29 @@ function renderStorageValue() {
     return;
   }
   if (keyLabel) keyLabel.textContent = selected;
-  body.innerHTML = renderJSON(entries[selected]);
+  // Clone-replace to remove stale event listeners
+  const fresh = body.cloneNode(false);
+  body.parentNode.replaceChild(fresh, body);
+  body = fresh;
+
+  let val = entries[selected];
+  // Try to parse JSON strings into objects for tree display
+  if (typeof val === 'string') {
+    try { val = JSON.parse(val); } catch {}
+  }
+
+  if (val && typeof val === 'object') {
+    body.appendChild(createTreeNode(null, val, false));
+    body.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showContextMenu(e, [
+        { label: 'Copy Value', action: () => navigator.clipboard.writeText(JSON.stringify(val, null, 2)) },
+        { label: 'Copy Key', action: () => navigator.clipboard.writeText(selected) },
+      ]);
+    });
+  } else {
+    body.innerHTML = renderJSON(val);
+  }
 }
 
 function formatSize(bytes) {
@@ -2872,6 +2955,257 @@ function formatSize(bytes) {
 // ─────────────────────────────────────────────────────────────────────────────
 // REACT TREE PANEL
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// NATIVE LOGS PANEL
+// ─────────────────────────────────────────────────────────────────────────────
+const _nativeState = { logs: [], connected: false, platform: null, levelFilter: 'all', searchFilter: '' };
+const MAX_NATIVE_LOGS = 2000;
+
+function initNativeLogsPanel() {
+  const panel = $('panel-native');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="panel-toolbar">
+      <span class="panel-label">Native Logs</span>
+      <span class="badge" id="nativeBadge">0</span>
+      <div class="ml-auto" style="display:flex;align-items:center;gap:6px">
+        <span class="native-status" id="nativeStatus">Detecting...</span>
+        <button class="panel-clear-btn" id="nativeClear">Clear</button>
+      </div>
+    </div>
+    <div class="native-connect-panel" id="nativeConnectPanel">
+      <div class="native-hero">
+        <div style="font-size:36px;opacity:0.15;margin-bottom:12px">📱</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">Native Logs</div>
+        <div style="font-size:11px;color:var(--text-dim);max-width:420px;line-height:1.7;margin-bottom:20px">
+          Stream native crash logs, errors, and warnings directly in ReactoRadar.<br/>
+          No need to open Android Studio or Xcode.
+        </div>
+        <div class="native-platform-cards">
+          <div class="native-card" id="nativeCardAndroid">
+            <div class="native-card-icon">🤖</div>
+            <div class="native-card-title">Android</div>
+            <div class="native-card-hint">Requires: <code>adb</code> in PATH (Android SDK)</div>
+            <div class="native-card-prereq">
+              <div class="native-prereq-step"><b>Prerequisites:</b></div>
+              <div class="native-prereq-step">1. Enable <b>Developer Options</b> on device<br/><span style="color:var(--text-dim);font-size:9px">Settings → About Phone → Tap Build Number 7 times</span></div>
+              <div class="native-prereq-step">2. Enable <b>USB Debugging</b><br/><span style="color:var(--text-dim);font-size:9px">Settings → Developer Options → USB Debugging → ON</span></div>
+              <div class="native-prereq-step">3. Connect device via USB and accept the prompt</div>
+              <div class="native-prereq-step">4. Verify: run <code>adb devices</code> in terminal</div>
+            </div>
+            <div id="nativeAndroidStatus" class="native-detect-status"></div>
+            <button class="native-connect-btn" id="nativeConnectAndroid">Connect Android</button>
+          </div>
+          <div class="native-card" id="nativeCardIOS">
+            <div class="native-card-icon">🍎</div>
+            <div class="native-card-title">iOS</div>
+            <div class="native-card-hint">Simulator or USB device</div>
+            <div class="native-card-prereq">
+              <div class="native-prereq-step"><b>Simulator:</b></div>
+              <div class="native-prereq-step">Requires Xcode Command Line Tools<br/><code>xcode-select --install</code></div>
+              <div class="native-prereq-step" style="margin-top:6px"><b>Real Device (USB):</b></div>
+              <div class="native-prereq-step">1. Install: <code>brew install libimobiledevice</code></div>
+              <div class="native-prereq-step">2. Connect device, tap <b>Trust</b> on the prompt</div>
+              <div class="native-prereq-step">3. Verify: <code>idevice_id -l</code> shows device UDID</div>
+            </div>
+            <div id="nativeIOSStatus" class="native-detect-status"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="native-connect-btn" id="nativeConnectIOSSim">Simulator</button>
+              <button class="native-connect-btn" id="nativeConnectIOSDevice">USB Device</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="native-logs-area" id="nativeLogsArea" style="display:none">
+      <div class="native-filter-bar">
+        <input id="nativeSearch" class="net-search-input" placeholder="Filter logs..." />
+        <div class="native-level-filters" id="nativeLevelFilters">
+          <button class="net-status-btn active" data-level="all">All</button>
+          <button class="net-status-btn" data-level="fatal">Fatal</button>
+          <button class="net-status-btn" data-level="error">Error</button>
+          <button class="net-status-btn" data-level="warn">Warn</button>
+          <button class="net-status-btn" data-level="info">Info</button>
+          <button class="net-status-btn" data-level="debug">Debug</button>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+          <button class="panel-clear-btn" id="nativeLogsClear">Clear</button>
+          <button class="panel-clear-btn" id="nativeDisconnect" style="color:var(--red)">Disconnect</button>
+        </div>
+      </div>
+      <div class="native-log-list" id="nativeLogList"></div>
+    </div>`;
+
+  // Connect buttons
+  $('nativeConnectAndroid')?.addEventListener('click', () => window.electronAPI?.startNativeLogs('android'));
+  $('nativeConnectIOSSim')?.addEventListener('click', () => window.electronAPI?.startNativeLogs('ios-sim'));
+  $('nativeConnectIOSDevice')?.addEventListener('click', () => window.electronAPI?.startNativeLogs('ios-device'));
+  $('nativeDisconnect')?.addEventListener('click', () => window.electronAPI?.stopNativeLogs());
+
+  // Clear buttons (toolbar + logs area)
+  $('nativeClear')?.addEventListener('click', _clearNativeLogs);
+  $('nativeLogsClear')?.addEventListener('click', _clearNativeLogs);
+
+  // Level filter
+  $('nativeLevelFilters')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.net-status-btn');
+    if (!btn) return;
+    $('nativeLevelFilters').querySelectorAll('.net-status-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _nativeState.levelFilter = btn.dataset.level;
+    _renderNativeLogs();
+  });
+
+  // Search
+  $('nativeSearch')?.addEventListener('input', (e) => {
+    _nativeState.searchFilter = e.target.value.toLowerCase().trim();
+    _renderNativeLogs();
+  });
+
+  // IPC: receive native logs
+  window.electronAPI?.on('native-log', (log) => {
+    if (!isTabEnabled('native')) return;
+    _nativeState.logs.push(log);
+    if (_nativeState.logs.length > MAX_NATIVE_LOGS) {
+      _nativeState.logs = _nativeState.logs.slice(-MAX_NATIVE_LOGS);
+    }
+    $('nativeBadge').textContent = _nativeState.logs.length;
+    _appendNativeLog(log);
+  });
+
+  // IPC: connection status
+  window.electronAPI?.on('native-status', (status) => {
+    _nativeState.connected = status.connected;
+    _nativeState.platform = status.platform || null;
+    const statusEl = $('nativeStatus');
+    const connectPanel = $('nativeConnectPanel');
+    const logsArea = $('nativeLogsArea');
+
+    if (status.connected) {
+      if (statusEl) { statusEl.textContent = `Connected (${status.platform})`; statusEl.style.color = 'var(--green)'; }
+      if (connectPanel) connectPanel.style.display = 'none';
+      if (logsArea) logsArea.style.display = 'flex';
+    } else {
+      if (statusEl) {
+        statusEl.textContent = status.error || 'Not connected';
+        statusEl.style.color = status.error ? 'var(--red)' : 'var(--text-dim)';
+      }
+      if (connectPanel) connectPanel.style.display = 'flex';
+      if (logsArea) logsArea.style.display = 'none';
+    }
+  });
+
+  // Auto-detect platform and auto-connect
+  _autoDetectNative();
+}
+
+function _clearNativeLogs() {
+  _nativeState.logs = [];
+  if ($('nativeBadge')) $('nativeBadge').textContent = '0';
+  const list = $('nativeLogList');
+  if (list) list.innerHTML = '';
+}
+
+async function _autoDetectNative() {
+  const statusEl = $('nativeStatus');
+  try {
+    const result = await window.electronAPI?.detectNativePlatform();
+    if (!result) { if (statusEl) { statusEl.textContent = 'Detection unavailable'; statusEl.style.color = 'var(--text-dim)'; } return; }
+
+    // Update card statuses
+    const androidStatus = $('nativeAndroidStatus');
+    const iosStatus = $('nativeIOSStatus');
+    if (androidStatus) {
+      if (result.android) { androidStatus.innerHTML = '<span style="color:var(--green)">Device detected</span>'; }
+      else if (result.adbPath) { androidStatus.innerHTML = '<span style="color:var(--orange)">adb found — no device connected</span>'; }
+      else { androidStatus.innerHTML = '<span style="color:var(--text-dim)">adb not found</span>'; }
+    }
+    if (iosStatus) {
+      const parts = [];
+      if (result.iosSim) parts.push('<span style="color:var(--green)">Simulator running</span>');
+      if (result.iosDevice) parts.push('<span style="color:var(--green)">USB device detected</span>');
+      if (!parts.length) parts.push('<span style="color:var(--text-dim)">No device detected</span>');
+      iosStatus.innerHTML = parts.join(' · ');
+    }
+
+    // Show detection result — user clicks Connect to start
+    if (result.android || result.iosSim || result.iosDevice) {
+      const detected = [result.android ? 'Android' : '', result.iosSim ? 'iOS Sim' : '', result.iosDevice ? 'iOS Device' : ''].filter(Boolean).join(', ');
+      if (statusEl) { statusEl.textContent = `Detected: ${detected} — click Connect to start`; statusEl.style.color = 'var(--accent)'; }
+    } else {
+      if (statusEl) { statusEl.textContent = 'No device detected'; statusEl.style.color = 'var(--text-dim)'; }
+    }
+  } catch {
+    if (statusEl) { statusEl.textContent = 'Detection failed'; statusEl.style.color = 'var(--text-dim)'; }
+  }
+}
+
+function _appendNativeLog(log) {
+  const list = $('nativeLogList');
+  if (!list) return;
+
+  // Check filters
+  if (_nativeState.levelFilter !== 'all' && log.level !== _nativeState.levelFilter) return;
+  if (_nativeState.searchFilter && !log.message?.toLowerCase().includes(_nativeState.searchFilter) && !log.tag?.toLowerCase().includes(_nativeState.searchFilter)) return;
+
+  const isExpandable = log.level === 'error' || log.level === 'fatal' || (log.message || '').length > 200;
+  const row = document.createElement('div');
+  row.className = `native-log-row native-${log.level || 'info'}`;
+
+  const time = log.time || new Date(log.ts).toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  // Header line (always visible)
+  const header = document.createElement('div');
+  header.className = 'native-log-header';
+  header.innerHTML = `<span class="native-log-time">${esc(time)}</span>`
+    + `<span class="native-log-level">${esc((log.level || 'info').toUpperCase())}</span>`
+    + (log.tag ? `<span class="native-log-tag">${esc(log.tag)}</span>` : '')
+    + `<span class="native-log-preview">${esc((log.message || '').split('\\n')[0].slice(0, 200))}</span>`;
+  row.appendChild(header);
+
+  // Expandable full message (for errors and long messages)
+  if (isExpandable) {
+    const fullMsg = document.createElement('div');
+    fullMsg.className = 'native-log-full';
+    fullMsg.style.display = 'none';
+    fullMsg.textContent = log.message || '';
+    row.appendChild(fullMsg);
+
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', () => {
+      const open = fullMsg.style.display !== 'none';
+      fullMsg.style.display = open ? 'none' : 'block';
+      row.classList.toggle('expanded', !open);
+    });
+  }
+
+  // Right-click to copy
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showContextMenu(e, [
+      { label: 'Copy Message', action: () => navigator.clipboard.writeText(log.message || '') },
+      { label: 'Copy Raw Line', action: () => navigator.clipboard.writeText(log.raw || log.message || '') },
+      ...(log.tag ? [{ label: `Copy Tag (${log.tag})`, action: () => navigator.clipboard.writeText(log.tag) }] : []),
+    ]);
+  });
+
+  list.appendChild(row);
+
+  // Cap DOM rows
+  while (list.children.length > 1000) list.firstChild.remove();
+
+  // Auto-scroll if near bottom
+  const atBottom = (list.scrollHeight - list.scrollTop - list.clientHeight) < 150;
+  if (atBottom) list.scrollTop = list.scrollHeight;
+}
+
+function _renderNativeLogs() {
+  const list = $('nativeLogList');
+  if (!list) return;
+  list.innerHTML = '';
+  _nativeState.logs.forEach(log => _appendNativeLog(log));
+}
+
 function initReactPanel() {
   const panel = $('panel-react');
   panel.innerHTML = `
@@ -2969,24 +3303,25 @@ function _updateHiddenBadge() {
 
 // ─── Tab Visibility ──────────────────────────────────────────────────────────
 const TAB_CONFIG = [
-  { id: 'console',     label: 'Console',     icon: '🖥', essential: true },
-  { id: 'network',     label: 'Network',     icon: '📡', essential: true },
-  { id: 'redux',       label: 'Redux',       icon: '🔲', essential: false },
-  { id: 'ga4',         label: 'GA4 Events',  icon: '📊', essential: false },
-  { id: 'storage',     label: 'Storage',     icon: '💾', essential: false },
-  { id: 'memory',      label: 'Memory',      icon: '🧠', essential: false },
-  { id: 'performance', label: 'Performance', icon: '⚡', essential: false },
-  { id: 'react',       label: 'React Tree',  icon: '⚛️', essential: false },
+  { id: 'console',     label: 'Console',      icon: '🖥', essential: true },
+  { id: 'network',     label: 'Network',      icon: '📡', essential: true },
+  { id: 'redux',       label: 'Redux',        icon: '🔲', essential: false },
+  { id: 'ga4',         label: 'GA4 Events',   icon: '📊', essential: false },
+  { id: 'storage',     label: 'AsyncStorage', icon: '💾', essential: false },
+  { id: 'memory',      label: 'Memory',       icon: '🧠', essential: false, defaultHidden: true },
+  { id: 'performance', label: 'Performance',  icon: '⚡', essential: false, defaultHidden: true },
+  { id: 'react',       label: 'React Tree',   icon: '⚛️', essential: false },
+  { id: 'native',      label: 'Native Logs',  icon: '📱', essential: false, defaultHidden: true },
 ];
 function getTabVisibility() {
   try {
     const saved = JSON.parse(localStorage.getItem('rn-debug-tab-visibility') || '{}');
     const result = {};
-    TAB_CONFIG.forEach(t => { result[t.id] = saved[t.id] !== undefined ? saved[t.id] : true; });
+    TAB_CONFIG.forEach(t => { result[t.id] = saved[t.id] !== undefined ? saved[t.id] : !t.defaultHidden; });
     return result;
   } catch {
     const result = {};
-    TAB_CONFIG.forEach(t => { result[t.id] = true; });
+    TAB_CONFIG.forEach(t => { result[t.id] = !t.defaultHidden; });
     return result;
   }
 }
@@ -2996,7 +3331,13 @@ function setTabVisibility(vis) {
 function getTabOrder() {
   try {
     const saved = JSON.parse(localStorage.getItem('rn-debug-tab-order') || '[]');
-    if (saved.length === TAB_CONFIG.length) return saved;
+    if (saved.length) {
+      // Merge: keep saved order, append any new tabs not in saved list
+      const allIds = TAB_CONFIG.map(t => t.id);
+      const merged = saved.filter(id => allIds.includes(id));
+      allIds.forEach(id => { if (!merged.includes(id)) merged.push(id); });
+      return merged;
+    }
   } catch {}
   return TAB_CONFIG.map(t => t.id);
 }
@@ -3463,7 +3804,7 @@ applyTabVisibility();
 window.electronAPI?.setMetroPort(getStoredMetroPort());
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SOURCES PANEL — CDP-based file browser + breakpoints
+// SOURCES PANEL (placeholder — use JS Debugger button for breakpoints)
 // ─────────────────────────────────────────────────────────────────────────────
 function initSourcesPanel() {
   const panel = $('panel-sources');
@@ -3944,4 +4285,5 @@ initMemoryPanel();
 initReduxPanel();
 initStoragePanel();
 initReactPanel();
+initNativeLogsPanel();
 initSettingsPanel();
