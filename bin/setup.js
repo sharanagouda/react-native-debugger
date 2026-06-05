@@ -465,7 +465,7 @@ ${SDK_MARKER_END}
     console.log('    1. Start the debugger:  ' + C.cyan + 'open "/Applications/ReactoRadar.app"' + C.reset);
   } else {
     console.log('    1. Start the debugger:  ' + C.cyan + 'npx reactoradar' + C.reset);
-    console.log('       ' + C.dim + '(or download .dmg from https://github.com/sharanagouda/react-native-debugger/releases)' + C.reset);
+    console.log('       ' + C.dim + '(or download .dmg from https://github.com/sharanagouda/reactoradar/releases)' + C.reset);
   }
   console.log('    2. Run your RN app:     ' + C.cyan + 'npx react-native start --reset-cache' + C.reset);
   console.log('    3. Console, Network, Storage auto-connect');

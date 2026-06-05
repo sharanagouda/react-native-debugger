@@ -1,7 +1,7 @@
 {
   "name": "reactoradar",
   "productName": "ReactoRadar",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "macOS debugger for React Native — Console, Sources, Network, Performance, Memory, Redux, AsyncStorage, React tree. Supports RN 0.74+ with Hermes and New Architecture.",
   "main": "main.js",
   "bin": {
@@ -18,16 +18,16 @@
     "network-inspector",
     "hermes",
     "flipper-alternative",
-    "react-native-debugger",
+    "reactoradar",
     "macos"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sharanagouda/react-native-debugger.git"
+    "url": "git+https://github.com/sharanagouda/reactoradar.git"
   },
-  "homepage": "https://github.com/sharanagouda/react-native-debugger#readme",
+  "homepage": "https://github.com/sharanagouda/reactoradar#readme",
   "bugs": {
-    "url": "https://github.com/sharanagouda/react-native-debugger/issues"
+    "url": "https://github.com/sharanagouda/reactoradar/issues"
   },
   "license": "MIT",
   "author": "sharanagouda",
@@ -66,7 +66,7 @@
       {
         "provider": "github",
         "owner": "sharanagouda",
-        "repo": "react-native-debugger"
+        "repo": "reactoradar"
       }
     ],
     "mac": {

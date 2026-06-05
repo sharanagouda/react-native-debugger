@@ -27,14 +27,14 @@
 
 ### Console — Interactive Log Viewer
 <p align="center">
-  <img src="https://raw.githubusercontent.com/sharanagouda/react-native-debugger/main/screenshots/consoleLogs.png" alt="Console Panel" width="800" />
+  <img src="https://raw.githubusercontent.com/sharanagouda/reactoradar/main/screenshots/consoleLogs.png" alt="Console Panel" width="800" />
 </p>
 
 *Collapsible object trees, multi-select level filters, log grouping, search, export as JSON, right-click to copy*
 
 ### Network — Chrome DevTools-style Inspector
 <p align="center">
-  <img src="https://raw.githubusercontent.com/sharanagouda/react-native-debugger/main/screenshots/networkLogs.png" alt="Network Panel" width="800" />
+  <img src="https://raw.githubusercontent.com/sharanagouda/reactoradar/main/screenshots/networkLogs.png" alt="Network Panel" width="800" />
 </p>
 
 *Resizable/sortable columns, slow API highlights, export as HAR, stats bar, hide unwanted URLs, throttling*
@@ -85,7 +85,7 @@ npx reactoradar            # Launch the debugger
 
 ### Option B: Download .dmg
 
-1. Download from [Releases](https://github.com/sharanagouda/react-native-debugger/releases)
+1. Download from [Releases](https://github.com/sharanagouda/reactoradar/releases)
 2. Drag **ReactoRadar** to Applications
 3. Install the SDK: `npx reactoradar setup` from your RN project
 4. Open ReactoRadar from Applications
@@ -101,8 +101,8 @@ npm install -g reactoradar
 ### Option D: Build from source
 
 ```bash
-git clone https://github.com/sharanagouda/react-native-debugger.git
-cd react-native-debugger
+git clone https://github.com/sharanagouda/reactoradar.git
+cd reactoradar
 npm install
 npm start          # dev mode
 npm run build      # build .dmg
@@ -314,8 +314,8 @@ If ReactoRadar helps your workflow, consider supporting development:
 Contributions welcome! Fork → branch → PR.
 
 ```bash
-git clone https://github.com/sharanagouda/react-native-debugger.git
-cd react-native-debugger
+git clone https://github.com/sharanagouda/reactoradar.git
+cd reactoradar
 npm install
 npm start
 ```

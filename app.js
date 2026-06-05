@@ -402,7 +402,7 @@ function _applyUpdateBanner() {
         btn.innerHTML = '<button id="updateBtn" class="tb-btn primary" style="font-size:11px;padding:6px 16px">Download v' + latest + '</button>';
         aboutEl.appendChild(btn);
         $('updateBtn')?.addEventListener('click', () => {
-          window.electronAPI?.openExternal('https://github.com/sharanagouda/react-native-debugger/releases');
+          window.electronAPI?.openExternal('https://github.com/sharanagouda/reactoradar/releases');
         });
       }
     }
@@ -3694,10 +3694,10 @@ function initSettingsPanel() {
 
   // About links
   $('linkGithub')?.addEventListener('click', () => {
-    window.electronAPI?.openExternal('https://github.com/sharanagouda/react-native-debugger');
+    window.electronAPI?.openExternal('https://github.com/sharanagouda/reactoradar');
   });
   $('linkDocs')?.addEventListener('click', () => {
-    window.electronAPI?.openExternal('https://github.com/sharanagouda/react-native-debugger#readme');
+    window.electronAPI?.openExternal('https://github.com/sharanagouda/reactoradar#readme');
   });
   $('linkLinkedIn')?.addEventListener('click', () => {
     window.electronAPI?.openExternal('https://www.linkedin.com/in/sharanagoudamk/');
