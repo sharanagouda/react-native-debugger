@@ -194,23 +194,37 @@ function clearActiveTab() {
       const memHT = $('memHeapTotal'); if (memHT) memHT.textContent = '—';
       const memN = $('memNative'); if (memN) memN.textContent = '—';
       break;
+    case 'native':
+      _nativeState.logs = [];
+      if ($('nativeBadge')) $('nativeBadge').textContent = '0';
+      const nativeList = $('nativeLogList');
+      if (nativeList) nativeList.innerHTML = '';
+      break;
     default:
       break;
   }
 }
 
-// Clear all (used by IPC clear-all-ui from menu Cmd+K)
+// Clear all (used by IPC clear-all-ui from menu Cmd+K, and on device disconnect)
 function clearAll() {
+  // Cancel pending render batches
+  if (_consoleRAF) { cancelAnimationFrame(_consoleRAF); _consoleRAF = null; }
+  if (_netRAF) { cancelAnimationFrame(_netRAF); _netRAF = null; }
+  if (_storageRAF) { cancelAnimationFrame(_storageRAF); _storageRAF = null; }
+  // Console
   state.console.logs = [];
   _consolePending = [];
   _lastLogMsg = ''; _lastLogRow = null; _lastLogCount = 1;
+  // Network
   state.network.requests = {};
   state.network.order = [];
   state.network.selectedId = null;
   closeNetDetail();
+  // Redux
   state.redux.actions = [];
   state.redux.states = [];
   state.redux.selected = -1;
+  // Storage
   state.storage.entries = {};
   state.storage.keys = [];
   state.storage.selected = null;
@@ -226,6 +240,21 @@ function clearAll() {
   _nativeState.logs = [];
   const nativeList = $('nativeLogList');
   if (nativeList) nativeList.innerHTML = '';
+  // Performance
+  perfState.fps = [];
+  perfState.jsThread = [];
+  perfState.uiThread = [];
+  perfState.data = [];
+  const perfFPS = $('perfFPS'); if (perfFPS) perfFPS.textContent = '—';
+  const perfJS = $('perfJS'); if (perfJS) perfJS.textContent = '—';
+  const perfUI = $('perfUI'); if (perfUI) perfUI.textContent = '—';
+  clearPerfCanvas('perfFPSCanvas');
+  clearPerfCanvas('perfJSCanvas');
+  clearPerfCanvas('perfUICanvas');
+  // Memory
+  const memHU = $('memHeapUsed'); if (memHU) memHU.textContent = '—';
+  const memHT = $('memHeapTotal'); if (memHT) memHT.textContent = '—';
+  const memN = $('memNative'); if (memN) memN.textContent = '—';
   // Badges
   $('cBadge').textContent = '0';
   $('nBadge').textContent = '0';
@@ -239,6 +268,42 @@ function clearAll() {
   renderRedux();
   renderStorage();
   if (typeof renderGA4List === 'function') { renderGA4List(); renderGA4Summary(); }
+}
+
+// Free heavy in-memory data without clearing the visible UI.
+// Called on device disconnect and app quit to reduce memory footprint
+// while keeping logs/network/redux visible for inspection.
+function freeMemory() {
+  // Drop response/request bodies from network requests (biggest memory hog)
+  for (const id of state.network.order) {
+    const r = state.network.requests[id];
+    if (r) { r.responseBody = null; r.requestBody = null; }
+  }
+  // Trim console logs to a small tail (keep last 200 for reference)
+  if (state.console.logs.length > 200) {
+    state.console.logs = state.console.logs.slice(-200);
+  }
+  // Drop full Redux state snapshots (keep action metadata)
+  state.redux.states = [];
+  // Drop storage values (keep keys for reference)
+  for (const k in state.storage.entries) {
+    state.storage.entries[k] = null;
+  }
+  // Trim GA4 events
+  if (ga4State.events.length > 200) {
+    ga4State.events = ga4State.events.slice(-200);
+  }
+  // Trim native logs
+  if (_nativeState.logs.length > 200) {
+    _nativeState.logs = _nativeState.logs.slice(-200);
+  }
+  // Drop performance timeline data
+  perfState.data = [];
+  perfState.fps = [];
+  perfState.jsThread = [];
+  perfState.uiThread = [];
+  // Flush pending console batch
+  _consolePending = [];
 }
 
 // ─── CDP Button ───────────────────────────────────────────────────────────────
@@ -294,12 +359,24 @@ if (window.electronAPI) {
     handleMemoryEvent(event);
   });
 
-  window.electronAPI.on('redux-connected', on => { updateDeviceBanner('redux', on); });
-  window.electronAPI.on('network-connected', on => { updateDeviceBanner('network', on); });
-  window.electronAPI.on('storage-connected', on => { updateDeviceBanner('storage', on); });
-  window.electronAPI.on('react-dt-status', on => { updateDeviceBanner('reactDT', on); });
-
   window.electronAPI.on('clear-all-ui', clearAll);
+
+  // When all device bridges disconnect, release heavy memory but keep logs visible.
+  // Debounced to avoid data loss during hot reloads or flaky connections.
+  let _disconnectTimer = null;
+  window.electronAPI.on('device-all-disconnected', () => {
+    clearTimeout(_disconnectTimer);
+    _disconnectTimer = setTimeout(() => {
+      console.log('[App] All devices disconnected — freeing memory');
+      freeMemory();
+    }, 3000);
+  });
+  // Cancel pending free if a device reconnects
+  const _cancelDisconnectTimer = () => { clearTimeout(_disconnectTimer); _disconnectTimer = null; };
+  window.electronAPI.on('redux-connected', on => { if (on) _cancelDisconnectTimer(); updateDeviceBanner('redux', on); });
+  window.electronAPI.on('network-connected', on => { if (on) _cancelDisconnectTimer(); updateDeviceBanner('network', on); });
+  window.electronAPI.on('storage-connected', on => { if (on) _cancelDisconnectTimer(); updateDeviceBanner('storage', on); });
+  window.electronAPI.on('react-dt-status', on => { updateDeviceBanner('reactDT', on); });
 
   // Cmd+F — focus the search input for the active panel
   function _handleFind() {
@@ -341,8 +418,9 @@ if (window.electronAPI) {
     }
   });
 
-  window.electronAPI.on('app-version', (version) => {
+  window.electronAPI.on('app-version', (version, isPackaged) => {
     state._appVersion = version;
+    state._isPackaged = !!isPackaged;
     // Update anywhere the version is displayed
     document.querySelectorAll('#aboutVersion').forEach(el => el.textContent = 'v' + version);
   });
@@ -426,16 +504,19 @@ function _applyUpdateBanner() {
 }
 
 async function _showChangelog(version) {
+  if (!version || typeof version !== 'string') return;
+
   // Remove existing modal
   $('changelogModal')?.remove();
 
+  const safeVersion = esc(version);
   const modal = document.createElement('div');
   modal.id = 'changelogModal';
   modal.className = 'changelog-modal-overlay';
   modal.innerHTML = `
     <div class="changelog-modal">
       <div class="changelog-header">
-        <span class="changelog-title">What's New in v${esc(version)}</span>
+        <span class="changelog-title">What's New in v${safeVersion}</span>
         <button class="changelog-close" id="changelogClose">&times;</button>
       </div>
       <div class="changelog-body" id="changelogBody">
@@ -452,6 +533,11 @@ async function _showChangelog(version) {
   try {
     const notes = await window.electronAPI?.fetchChangelog(version);
     const body = $('changelogBody');
+    if (!body) return;
+    if (!notes || typeof notes !== 'string') {
+      body.innerHTML = '<div style="color:var(--text-dim);padding:20px;text-align:center">No release notes available.</div>';
+      return;
+    }
     if (body && notes) {
       // Simple markdown-like rendering
       body.innerHTML = notes
@@ -814,6 +900,41 @@ window.electronAPI?.on('console-event', addConsoleLog);
 // ─── Object Tree Renderer (Chrome DevTools-like) ─────────────────────────────
 // Builds interactive, collapsible DOM nodes for objects/arrays.
 
+// Collect all entries for an object: own data properties + prototype getter values.
+// Getter-derived keys use the clean name (e.g. "deliveryId") and skip backing
+// fields (e.g. "_deliveryId") so the log output mirrors the model's public API.
+function collectEntries(val) {
+  if (Array.isArray(val)) return val.map((v, i) => [i, v]);
+
+  const result = {};
+  const getterKeys = new Set();
+
+  // 1. Walk prototype chain and invoke getters
+  let proto = Object.getPrototypeOf(val);
+  while (proto && proto !== Object.prototype) {
+    const descs = Object.getOwnPropertyDescriptors(proto);
+    for (const [k, desc] of Object.entries(descs)) {
+      if (k === 'constructor') continue;
+      if (desc.get && !(k in result)) {
+        try { result[k] = desc.get.call(val); } catch { /* skip broken getters */ }
+        getterKeys.add(k);
+      }
+    }
+    proto = Object.getPrototypeOf(proto);
+  }
+
+  // 2. Add own data properties, but skip backing fields whose getter is present.
+  //    Convention: getter "foo" backs "_foo"; if "foo" was collected, skip "_foo".
+  const ownKeys = Object.keys(val);
+  for (const k of ownKeys) {
+    const clean = k.startsWith('_') ? k.slice(1) : null;
+    if (clean && getterKeys.has(clean)) continue; // skip _backing field
+    if (!(k in result)) result[k] = val[k];
+  }
+
+  return Object.entries(result);
+}
+
 function objPreview(val, maxLen) {
   maxLen = maxLen || 80;
   if (val === null) return 'null';
@@ -831,16 +952,16 @@ function objPreview(val, maxLen) {
     return `(${val.length}) [${items.join(', ')}${suffix}]`;
   }
   if (typeof val === 'object') {
-    const keys = Object.keys(val);
-    if (keys.length === 0) return '{}';
+    const entries = collectEntries(val);
+    if (entries.length === 0) return '{}';
     const items = [];
     let len = 2;
-    for (let i = 0; i < keys.length && len < maxLen; i++) {
-      const s = `${keys[i]}: ${primitivePreview(val[keys[i]])}`;
+    for (let i = 0; i < entries.length && len < maxLen; i++) {
+      const s = `${entries[i][0]}: ${primitivePreview(entries[i][1])}`;
       len += s.length + 2;
       items.push(s);
     }
-    const suffix = items.length < keys.length ? ', ...' : '';
+    const suffix = items.length < entries.length ? ', ...' : '';
     return `{${items.join(', ')}${suffix}}`;
   }
   return primitivePreview(val);
@@ -909,7 +1030,7 @@ function createTreeNode(key, val, startCollapsed) {
   function populateChildren() {
     if (populated) return;
     populated = true;
-    const entries = isArray ? val.map((v, i) => [i, v]) : Object.entries(val);
+    const entries = collectEntries(val);
     entries.forEach(([k, v]) => {
       children.appendChild(createTreeNode(k, v, true));
     });
@@ -3247,10 +3368,18 @@ function initNativeLogsPanel() {
       <div class="native-log-list" id="nativeLogList"></div>
     </div>`;
 
-  // Connect buttons
-  $('nativeConnectAndroid')?.addEventListener('click', () => window.electronAPI?.startNativeLogs('android'));
-  $('nativeConnectIOSSim')?.addEventListener('click', () => window.electronAPI?.startNativeLogs('ios-sim'));
-  $('nativeConnectIOSDevice')?.addEventListener('click', () => window.electronAPI?.startNativeLogs('ios-device'));
+  // Connect buttons — auto-enable tab when user clicks connect
+  function _enableNativeTab() {
+    const vis = getTabVisibility();
+    if (!vis['native']) {
+      vis['native'] = true;
+      setTabVisibility(vis);
+      applyTabVisibility();
+    }
+  }
+  $('nativeConnectAndroid')?.addEventListener('click', () => { _enableNativeTab(); window.electronAPI?.startNativeLogs('android'); });
+  $('nativeConnectIOSSim')?.addEventListener('click', () => { _enableNativeTab(); window.electronAPI?.startNativeLogs('ios-sim'); });
+  $('nativeConnectIOSDevice')?.addEventListener('click', () => { _enableNativeTab(); window.electronAPI?.startNativeLogs('ios-device'); });
   $('nativeDisconnect')?.addEventListener('click', () => window.electronAPI?.stopNativeLogs());
 
   // Clear buttons (toolbar + logs area)
@@ -3860,6 +3989,27 @@ function initSettingsPanel() {
               <b style="color:var(--text)">5.</b> <code style="color:var(--accent);background:var(--bg3);padding:1px 5px;border-radius:3px">npx reactoradar remove</code> to uninstall
             </div>
           </div>
+          <div class="settings-section">
+            <div class="settings-section-title">Version History</div>
+            <div class="settings-hint" style="margin-bottom:4px">Roll back to a previous version if you notice issues.</div>
+            <div class="settings-hint rollback-steps" id="rollbackSteps" style="margin-bottom:10px;line-height:1.8;font-size:10px">
+              <b style="color:var(--text)">How to roll back:</b><br/>
+              <span id="rollbackDmgSteps" style="display:none">
+                <b style="color:var(--text)">1.</b> Click <b>Download</b> on the version you want<br/>
+                <b style="color:var(--text)">2.</b> Open the downloaded <code style="color:var(--accent);background:var(--bg3);padding:1px 4px;border-radius:3px">.dmg</code> file<br/>
+                <b style="color:var(--text)">3.</b> Drag the app to Applications (replace existing)<br/>
+                <b style="color:var(--text)">4.</b> Relaunch ReactoRadar
+              </span>
+              <span id="rollbackNpmSteps" style="display:none">
+                <b style="color:var(--text)">1.</b> Run <code style="color:var(--accent);background:var(--bg3);padding:1px 4px;border-radius:3px">npx reactoradar@&lt;version&gt;</code> e.g. <code style="color:var(--accent);background:var(--bg3);padding:1px 4px;border-radius:3px">npx reactoradar@1.6.4</code><br/>
+                <b style="color:var(--text)">2.</b> Or pin globally: <code style="color:var(--accent);background:var(--bg3);padding:1px 4px;border-radius:3px">npm i -g reactoradar@1.6.4</code><br/>
+                <b style="color:var(--text)">3.</b> Run <code style="color:var(--accent);background:var(--bg3);padding:1px 4px;border-radius:3px">reactoradar</code> to launch
+              </span>
+            </div>
+            <div id="versionHistoryList" class="version-history-list">
+              <div style="color:var(--text-dim);font-size:11px;padding:12px;text-align:center">Loading versions...</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>`;
@@ -3966,6 +4116,120 @@ function initSettingsPanel() {
 
   // Apply update banner if update info arrived before settings panel was created
   _applyUpdateBanner();
+
+  // Fetch and render version history for rollback
+  _loadVersionHistory();
+}
+
+function _loadVersionHistory() {
+  const container = $('versionHistoryList');
+  if (!container) return;
+  if (!window.electronAPI || typeof window.electronAPI.fetchReleases !== 'function') {
+    container.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:12px;text-align:center">Version history not available.</div>';
+    return;
+  }
+
+  // Show appropriate rollback steps based on install type
+  const isPackaged = !!state._isPackaged;
+  const dmgSteps = $('rollbackDmgSteps');
+  const npmSteps = $('rollbackNpmSteps');
+  if (dmgSteps) dmgSteps.style.display = isPackaged ? '' : 'none';
+  if (npmSteps) npmSteps.style.display = isPackaged ? 'none' : '';
+
+  window.electronAPI.fetchReleases().then(releases => {
+    if (!Array.isArray(releases) || releases.length === 0) {
+      container.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:12px;text-align:center">Could not load versions.</div>';
+      return;
+    }
+
+    const currentVersion = state._appVersion || '';
+    container.innerHTML = '';
+
+    releases.forEach(r => {
+      if (!r || !r.version) return; // skip malformed entries
+
+      const isCurrent = r.version === currentVersion;
+      const row = document.createElement('div');
+      row.className = 'version-row' + (isCurrent ? ' version-current' : '');
+
+      // Safe date formatting
+      let dateStr = '';
+      if (r.date) {
+        try {
+          const d = new Date(r.date);
+          if (!isNaN(d.getTime())) {
+            dateStr = d.toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' });
+          }
+        } catch { /* skip bad date */ }
+      }
+
+      // Build action button based on install type
+      let actionHtml = '';
+      if (isCurrent) {
+        actionHtml = '<span class="version-installed">Installed</span>';
+      } else if (isPackaged) {
+        actionHtml = '<button class="version-install-btn" title="Download .dmg for this version">Download</button>';
+      } else {
+        actionHtml = `<button class="version-npm-btn" title="Copy npm install command">npx @${esc(r.version)}</button>`;
+      }
+
+      row.innerHTML = `
+        <div class="version-info">
+          <span class="version-tag">v${esc(r.version)}${r.prerelease ? ' <span class="version-pre">pre</span>' : ''}${isCurrent ? ' <span class="version-badge">current</span>' : ''}</span>
+          <span class="version-date">${esc(dateStr)}</span>
+        </div>
+        <div class="version-actions">
+          ${actionHtml}
+          <button class="version-notes-btn" title="View release notes">Notes</button>
+        </div>`;
+
+      // DMG download button — opens the .dmg asset or release page
+      const installBtn = row.querySelector('.version-install-btn');
+      if (installBtn) {
+        installBtn.addEventListener('click', () => {
+          const url = r.dmgUrl || r.htmlUrl || '';
+          if (url) {
+            window.electronAPI.openExternal(url);
+          }
+        });
+      }
+
+      // NPM copy button — copies the npx command to clipboard
+      const npmBtn = row.querySelector('.version-npm-btn');
+      if (npmBtn) {
+        npmBtn.addEventListener('click', () => {
+          const cmd = `npx reactoradar@${r.version}`;
+          navigator.clipboard.writeText(cmd).then(() => {
+            const orig = npmBtn.textContent;
+            npmBtn.textContent = 'Copied!';
+            npmBtn.style.color = 'var(--green)';
+            setTimeout(() => { npmBtn.textContent = orig; npmBtn.style.color = ''; }, 2000);
+          }).catch(() => {});
+        });
+      }
+
+      // Notes button — show changelog in modal
+      const notesBtn = row.querySelector('.version-notes-btn');
+      if (notesBtn) {
+        notesBtn.addEventListener('click', () => {
+          if (r.version && typeof _showChangelog === 'function') {
+            _showChangelog(r.version);
+          }
+        });
+      }
+
+      container.appendChild(row);
+    });
+
+    // If no rows were rendered (all entries were malformed)
+    if (container.children.length === 0) {
+      container.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:12px;text-align:center">No versions found.</div>';
+    }
+  }).catch(() => {
+    if (container) {
+      container.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:12px;text-align:center">Could not load versions. Check your internet connection.</div>';
+    }
+  });
 }
 
 // ─── Memory Monitor ──────────────────────────────────────────────────────────

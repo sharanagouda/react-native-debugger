@@ -1320,6 +1320,96 @@ mark { background: rgba(79,172,255,.2); color: var(--accent); border-radius: 2px
   text-decoration: underline;
 }
 
+/* Version History */
+.version-history-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg2);
+}
+.version-history-list::-webkit-scrollbar { width: 3px; }
+.version-history-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+.version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  transition: background 0.15s;
+}
+.version-row:last-child { border-bottom: none; }
+.version-row:hover { background: var(--bg3); }
+.version-row.version-current { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.version-info { display: flex; flex-direction: column; gap: 2px; }
+.version-tag { color: var(--text); font-weight: 600; font-size: 12px; }
+.version-date { color: var(--text-dim); font-size: 10px; }
+.version-badge {
+  display: inline-block;
+  background: var(--green);
+  color: #000;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 6px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+.version-pre {
+  display: inline-block;
+  background: var(--yellow);
+  color: #000;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.version-actions { display: flex; gap: 6px; align-items: center; }
+.version-installed {
+  font-size: 10px;
+  color: var(--green);
+  font-weight: 600;
+}
+.version-install-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.version-install-btn:hover { opacity: 0.85; }
+.version-notes-btn {
+  background: transparent;
+  color: var(--text-mid);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.version-npm-btn {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.version-npm-btn:hover { background: var(--accent); color: #fff; }
+.version-notes-btn:hover { color: var(--accent); border-color: var(--accent); }
+
 /* ─────────────────────────────────────────────────────────────────────────────
    SOURCES PANEL
 ───────────────────────────────────────────────────────────────────────────── */

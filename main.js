@@ -35,6 +35,7 @@ function _send(channel, ...args) {
 let reduxClients   = new Set();
 let storageClients = new Set();
 let networkClients = new Set();
+const _bridgeServers = [];  // track bridge WSS instances for cleanup on quit
 
 // ─── Set dock icon ASAP (before app ready) ──────────────────────────────────
 const _appIcon = nativeImage.createFromPath(path.join(__dirname, 'ReactoRadar.png'));
@@ -74,15 +75,16 @@ if (gotLock) app.whenReady().then(async () => {
 
   await createMainWindow();
 
-  // Send version to renderer — try package.json, fallback to app.getVersion()
+  // Send version + install type to renderer — try package.json, fallback to app.getVersion()
   let appVersion;
   try { appVersion = require('./package.json').version; } catch { appVersion = app.getVersion(); }
+  const isPackaged = app.isPackaged;
   // Send multiple times to ensure renderer catches it (covers race conditions)
   mainWindow.webContents.on('did-finish-load', () => {
     // Send immediately + retries
-    _send('app-version', appVersion);
+    _send('app-version', appVersion, isPackaged);
     [500, 2000, 5000].forEach(delay => {
-      setTimeout(() => _send('app-version', appVersion), delay);
+      setTimeout(() => _send('app-version', appVersion, isPackaged), delay);
     });
   });
 
@@ -102,12 +104,27 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   _forceQuit = true;
+  // Free renderer memory before shutdown (logs are not cleared — user may still see them briefly)
+  _send('device-all-disconnected');
+  // Close CDP DevTools window if open
+  if (devtoolsWindow && !devtoolsWindow.isDestroyed()) {
+    devtoolsWindow.destroy();
+    devtoolsWindow = null;
+  }
   // Close all WS servers gracefully
   if (reactDTServer) {
     reactDTServer.close();
     reactDTClients.forEach(ws => ws.close());
     reactDTClients.clear();
   }
+  // Close bridge servers and disconnect all clients
+  _bridgeServers.forEach(wss => {
+    wss.clients.forEach(ws => ws.close());
+    wss.close();
+  });
+  reduxClients.clear();
+  storageClients.clear();
+  networkClients.clear();
 });
 
 app.on('activate', () => {
@@ -336,6 +353,10 @@ function startReactDevToolsServer() {
         });
       });
 
+      ws.on('error', (err) => {
+        console.warn(`[ReactDT] Client error:`, err.message);
+      });
+
       ws.on('close', () => {
         reactDTClients.delete(ws);
         console.log(`[ReactDT] Client disconnected (total: ${reactDTClients.size})`);
@@ -380,6 +401,7 @@ function startBridgeServers() {
 function startBridge(port, name, clients, onEvent) {
   try {
     const wss = new WebSocketServer({ port });
+    _bridgeServers.push(wss);
     wss.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
         console.error(`[${name}] Port ${port} is already in use — another ReactoRadar or debugger may be running.`);
@@ -404,10 +426,19 @@ function startBridge(port, name, clients, onEvent) {
         }
       });
 
+      ws.on('error', (err) => {
+        console.warn(`[${name}] Client error:`, err.message);
+      });
+
       ws.on('close', () => {
         clients.delete(ws);
         if (clients.size === 0) {
           _send(`${name}-connected`, false);
+          // When every bridge has zero clients, tell the renderer to clear old data
+          if (reduxClients.size === 0 && storageClients.size === 0 && networkClients.size === 0) {
+            console.log('[Bridge] All device connections closed — sending clear signal');
+            _send('device-all-disconnected');
+          }
         }
       });
     });
@@ -589,6 +620,9 @@ function setupIPC() {
   });
 
   ipcMain.handle('fetch-changelog', async (_, version) => {
+    if (!version || typeof version !== 'string' || !/^[\d]+\.[\d]+\.[\d]+/.test(version)) {
+      return 'Invalid version.';
+    }
     return new Promise((resolve) => {
       https.get(`https://api.github.com/repos/sharanagouda/reactoradar/releases/tags/v${version}`, {
         headers: { 'User-Agent': 'ReactoRadar', 'Accept': 'application/vnd.github.v3+json' }
@@ -600,6 +634,44 @@ function setupIPC() {
           catch { resolve('Could not fetch release notes.'); }
         });
       }).on('error', () => resolve('Could not connect to GitHub.'));
+    });
+  });
+
+  // Fetch all releases for version history / rollback
+  ipcMain.handle('fetch-releases', async () => {
+    return new Promise((resolve) => {
+      https.get('https://api.github.com/repos/sharanagouda/reactoradar/releases?per_page=20', {
+        headers: { 'User-Agent': 'ReactoRadar', 'Accept': 'application/vnd.github.v3+json' }
+      }, (res) => {
+        let data = '';
+        res.on('data', d => data += d);
+        res.on('end', () => {
+          try {
+            const releases = JSON.parse(data);
+            if (!Array.isArray(releases)) { resolve([]); return; }
+            const mapped = [];
+            for (const r of releases) {
+              if (!r || typeof r !== 'object') continue;
+              const tag = r.tag_name || '';
+              const version = tag.replace(/^v/, '');
+              if (!version) continue; // skip entries with no version
+              const assets = Array.isArray(r.assets) ? r.assets : [];
+              mapped.push({
+                version,
+                tag,
+                name: r.name || tag || version,
+                date: r.published_at || null,
+                prerelease: !!r.prerelease,
+                body: r.body || '',
+                dmgUrl: (assets.find(a => a && a.name && a.name.endsWith('.dmg')) || {}).browser_download_url || '',
+                zipUrl: (assets.find(a => a && a.name && a.name.endsWith('.zip')) || {}).browser_download_url || '',
+                htmlUrl: r.html_url || '',
+              });
+            }
+            resolve(mapped);
+          } catch { resolve([]); }
+        });
+      }).on('error', () => resolve([]));
     });
   });
 
@@ -654,10 +726,9 @@ function setupIPC() {
   });
 
   ipcMain.on('start-native-logs', (_, platform) => {
-    // Kill existing process group
+    // Kill existing process
     if (_nativeLogProcess) {
-      try { process.kill(-_nativeLogProcess.pid); } catch {}
-      try { _nativeLogProcess.kill(); } catch {}
+      try { _nativeLogProcess.kill('SIGTERM'); } catch {}
       _nativeLogProcess = null;
     }
 
@@ -665,9 +736,9 @@ function setupIPC() {
     let cmd, args;
 
     if (platform === 'android') {
-      // adb logcat — filter for app-relevant logs
+      // adb logcat — show only new logs from now (not historical buffer)
       cmd = 'adb';
-      args = ['logcat', '-v', 'threadtime', '*:W']; // Warnings and above
+      args = ['logcat', '-v', 'threadtime', '-T', '1', '*:W']; // -T 1 = last 1 line then real-time
     } else if (platform === 'ios-sim') {
       // xcrun simctl for iOS Simulator — use syslog style for parseable output
       cmd = 'xcrun';
@@ -682,9 +753,10 @@ function setupIPC() {
     }
 
     try {
-      _nativeLogProcess = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+      _nativeLogProcess = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
       _send('native-status', { connected: true, platform });
+      console.log(`[NativeLogs] Started ${cmd} ${args.join(' ')} (pid: ${_nativeLogProcess.pid})`);
 
       let buffer = '';
       _nativeLogProcess.stdout.on('data', (chunk) => {
@@ -702,6 +774,10 @@ function setupIPC() {
         const text = chunk.toString().trim();
         if (text) _send('native-log', { level: 'error', message: text, source: 'stderr', ts: Date.now() });
       });
+
+      // Guard against stream errors (broken pipe, etc.)
+      _nativeLogProcess.stdout.on('error', () => {});
+      _nativeLogProcess.stderr.on('error', () => {});
 
       _nativeLogProcess.on('close', (code) => {
         _nativeLogProcess = null;
