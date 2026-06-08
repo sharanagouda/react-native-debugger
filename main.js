@@ -588,6 +588,21 @@ function setupIPC() {
     }
   });
 
+  ipcMain.handle('fetch-changelog', async (_, version) => {
+    return new Promise((resolve) => {
+      https.get(`https://api.github.com/repos/sharanagouda/reactoradar/releases/tags/v${version}`, {
+        headers: { 'User-Agent': 'ReactoRadar', 'Accept': 'application/vnd.github.v3+json' }
+      }, (res) => {
+        let data = '';
+        res.on('data', d => data += d);
+        res.on('end', () => {
+          try { resolve(JSON.parse(data).body || 'No release notes available.'); }
+          catch { resolve('Could not fetch release notes.'); }
+        });
+      }).on('error', () => resolve('Could not connect to GitHub.'));
+    });
+  });
+
   ipcMain.on('install-update', () => {
     if (autoUpdater) {
       autoUpdater.quitAndInstall(false, true);

@@ -35,4 +35,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startNativeLogs: (platform) => ipcRenderer.send('start-native-logs', platform),
   stopNativeLogs: () => ipcRenderer.send('stop-native-logs'),
   detectNativePlatform: () => ipcRenderer.invoke('detect-native-platform'),
+  fetchChangelog: (version) => ipcRenderer.invoke('fetch-changelog', version),
 });

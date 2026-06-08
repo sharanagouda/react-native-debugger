@@ -303,6 +303,17 @@ if (window.electronAPI) {
 
   // Cmd+F — focus the search input for the active panel
   function _handleFind() {
+    // If network detail is open, focus the detail search
+    if (state.activePanel === 'network' && state.network.selectedId) {
+      const wrap = $('detailSearchWrap');
+      const input = $('detailSearchInput');
+      if (wrap && input) {
+        wrap.style.display = 'flex';
+        input.focus();
+        input.select();
+        return;
+      }
+    }
     const searchMap = {
       console: 'consoleSearch',
       network: 'netSearchInput',
@@ -366,6 +377,7 @@ function _applyUpdateBanner() {
   if (!info) return;
   const { current, latest, autoUpdate } = info;
   const downloaded = state._updateDownloaded;
+  const targetVersion = downloaded || latest;
 
   const el = $('aboutVersion');
   if (el) {
@@ -376,36 +388,83 @@ function _applyUpdateBanner() {
     }
   }
 
-  // Remove old button if state changed
+  // Remove old buttons if state changed
   const oldBtn = $('updateBtn');
   if (oldBtn && downloaded && !oldBtn.dataset.isRestart) oldBtn.parentElement?.remove();
+  const oldChangelog = $('changelogBtn');
+  if (oldChangelog && downloaded && !oldChangelog.dataset.updated) oldChangelog.remove();
 
-  // Add update button in settings if not already there
+  const aboutEl = document.querySelector('.settings-about');
+  if (!aboutEl) return;
+
+  // Add "What's new?" link
+  if (!$('changelogBtn')) {
+    const link = document.createElement('div');
+    link.style.cssText = 'margin-top:6px;text-align:center';
+    link.innerHTML = `<span id="changelogBtn" class="about-link" style="font-size:10px;cursor:pointer" data-updated="${downloaded ? '1' : ''}">What's new in v${targetVersion}?</span>`;
+    aboutEl.appendChild(link);
+    $('changelogBtn')?.addEventListener('click', () => _showChangelog(targetVersion));
+  }
+
+  // Add update button
   if (!$('updateBtn')) {
-    const aboutEl = document.querySelector('.settings-about');
-    if (aboutEl) {
-      const btn = document.createElement('div');
-      btn.style.cssText = 'margin-top:10px';
-      if (downloaded) {
-        // Update is downloaded — show "Restart & Update"
-        btn.innerHTML = '<button id="updateBtn" data-is-restart="1" class="tb-btn primary" style="font-size:11px;padding:6px 16px">Restart & Update to v' + downloaded + '</button>';
-        aboutEl.appendChild(btn);
-        $('updateBtn')?.addEventListener('click', () => {
-          window.electronAPI?.installUpdate();
-        });
-      } else if (autoUpdate) {
-        // Auto-update in progress — show downloading status
-        btn.innerHTML = '<button id="updateBtn" class="tb-btn" style="font-size:11px;padding:6px 16px;opacity:0.7" disabled>Downloading v' + latest + '...</button>';
-        aboutEl.appendChild(btn);
-      } else {
-        // npx/manual — show download link
-        btn.innerHTML = '<button id="updateBtn" class="tb-btn primary" style="font-size:11px;padding:6px 16px">Download v' + latest + '</button>';
-        aboutEl.appendChild(btn);
-        $('updateBtn')?.addEventListener('click', () => {
-          window.electronAPI?.openExternal('https://github.com/sharanagouda/reactoradar/releases');
-        });
-      }
+    const btn = document.createElement('div');
+    btn.style.cssText = 'margin-top:8px;text-align:center';
+    if (downloaded) {
+      btn.innerHTML = '<button id="updateBtn" data-is-restart="1" class="tb-btn primary" style="font-size:11px;padding:6px 16px">Restart & Update to v' + downloaded + '</button>';
+      aboutEl.appendChild(btn);
+      $('updateBtn')?.addEventListener('click', () => window.electronAPI?.installUpdate());
+    } else if (autoUpdate) {
+      btn.innerHTML = '<button id="updateBtn" class="tb-btn" style="font-size:11px;padding:6px 16px;opacity:0.7" disabled>Downloading v' + latest + '...</button>';
+      aboutEl.appendChild(btn);
+    } else {
+      btn.innerHTML = '<button id="updateBtn" class="tb-btn primary" style="font-size:11px;padding:6px 16px">Download v' + latest + '</button>';
+      aboutEl.appendChild(btn);
+      $('updateBtn')?.addEventListener('click', () => window.electronAPI?.openExternal('https://github.com/sharanagouda/reactoradar/releases'));
     }
+  }
+}
+
+async function _showChangelog(version) {
+  // Remove existing modal
+  $('changelogModal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'changelogModal';
+  modal.className = 'changelog-modal-overlay';
+  modal.innerHTML = `
+    <div class="changelog-modal">
+      <div class="changelog-header">
+        <span class="changelog-title">What's New in v${esc(version)}</span>
+        <button class="changelog-close" id="changelogClose">&times;</button>
+      </div>
+      <div class="changelog-body" id="changelogBody">
+        <div style="color:var(--text-dim);padding:20px;text-align:center">Loading release notes...</div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  // Close handlers
+  $('changelogClose')?.addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+  // Fetch changelog
+  try {
+    const notes = await window.electronAPI?.fetchChangelog(version);
+    const body = $('changelogBody');
+    if (body && notes) {
+      // Simple markdown-like rendering
+      body.innerHTML = notes
+        .replace(/^### (.+)$/gm, '<h3 style="color:var(--accent);font-size:12px;font-weight:700;margin:12px 0 6px">$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2 style="color:var(--text);font-size:14px;font-weight:700;margin:16px 0 8px">$1</h2>')
+        .replace(/^- \*\*(.+?)\*\*(.*)$/gm, '<div style="margin:3px 0;font-size:11px;line-height:1.6"><b style="color:var(--text)">$1</b><span style="color:var(--text-dim)">$2</span></div>')
+        .replace(/^- (.+)$/gm, '<div style="margin:3px 0;font-size:11px;line-height:1.6;color:var(--text-mid)">• $1</div>')
+        .replace(/`([^`]+)`/g, '<code style="background:var(--bg3);padding:1px 4px;border-radius:3px;color:var(--accent);font-size:10px">$1</code>')
+        .replace(/\n\n/g, '<br/>');
+    }
+  } catch {
+    const body = $('changelogBody');
+    if (body) body.innerHTML = '<div style="color:var(--red);padding:20px;text-align:center">Could not fetch release notes</div>';
   }
 }
 
@@ -1255,6 +1314,13 @@ function initNetworkPanel() {
       <div class="net-detail-pane" id="netDetailPane">
         <div class="net-detail-bar">
           <div class="detail-tabs" id="netDetailTabs"></div>
+          <div class="detail-search-wrap" id="detailSearchWrap" style="display:none">
+            <input id="detailSearchInput" class="detail-search-input" placeholder="Search key or value..." />
+            <span id="detailSearchCount" class="detail-search-count"></span>
+            <button class="detail-search-nav" id="detailSearchPrev" title="Previous">&#9650;</button>
+            <button class="detail-search-nav" id="detailSearchNext" title="Next">&#9660;</button>
+            <button class="detail-search-close" id="detailSearchClose" title="Close search">&times;</button>
+          </div>
           <button class="detail-close" id="netDetailClose" title="Close">&times;</button>
         </div>
         <div class="detail-content" id="netDetailContent"></div>
@@ -1407,6 +1473,121 @@ function initNetworkPanel() {
 
   // Close detail button
   $('netDetailClose').addEventListener('click', closeNetDetail);
+
+  // Detail panel search
+  let _detailSearchMatches = [];
+  let _detailSearchIdx = -1;
+
+  function _detailSearch() {
+    const term = $('detailSearchInput')?.value?.trim().toLowerCase();
+    const body = $('netDetailContent');
+    if (!body || !term) { _detailClearSearch(); return; }
+
+    // Remove old highlights
+    body.querySelectorAll('.detail-search-hl').forEach(el => {
+      const parent = el.parentNode;
+      parent.replaceChild(document.createTextNode(el.textContent), el);
+      parent.normalize();
+    });
+
+    _detailSearchMatches = [];
+    _detailSearchIdx = -1;
+
+    // Walk all text nodes and highlight matches
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null);
+    const textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+    textNodes.forEach(node => {
+      const text = node.textContent;
+      const lower = text.toLowerCase();
+      if (!lower.includes(term)) return;
+
+      const frag = document.createDocumentFragment();
+      let lastIdx = 0;
+      let idx;
+      while ((idx = lower.indexOf(term, lastIdx)) !== -1) {
+        if (idx > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, idx)));
+        const hl = document.createElement('span');
+        hl.className = 'detail-search-hl';
+        hl.textContent = text.slice(idx, idx + term.length);
+        _detailSearchMatches.push(hl);
+        frag.appendChild(hl);
+        lastIdx = idx + term.length;
+      }
+      if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+      node.parentNode.replaceChild(frag, node);
+    });
+
+    // Update count
+    const countEl = $('detailSearchCount');
+    if (countEl) countEl.textContent = _detailSearchMatches.length ? `${_detailSearchMatches.length} found` : 'No match';
+
+    // Navigate to first match
+    if (_detailSearchMatches.length) _detailNavTo(0);
+  }
+
+  function _detailNavTo(idx) {
+    // Remove active highlight from previous
+    if (_detailSearchIdx >= 0 && _detailSearchMatches[_detailSearchIdx]) {
+      _detailSearchMatches[_detailSearchIdx].classList.remove('active');
+    }
+    _detailSearchIdx = idx;
+    const el = _detailSearchMatches[idx];
+    if (!el) return;
+    el.classList.add('active');
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    // Update count
+    const countEl = $('detailSearchCount');
+    if (countEl) countEl.textContent = `${idx + 1}/${_detailSearchMatches.length}`;
+  }
+
+  function _detailClearSearch() {
+    const body = $('netDetailContent');
+    if (body) {
+      body.querySelectorAll('.detail-search-hl').forEach(el => {
+        const parent = el.parentNode;
+        parent.replaceChild(document.createTextNode(el.textContent), el);
+        parent.normalize();
+      });
+    }
+    _detailSearchMatches = [];
+    _detailSearchIdx = -1;
+    const countEl = $('detailSearchCount');
+    if (countEl) countEl.textContent = '';
+  }
+
+  $('detailSearchInput')?.addEventListener('input', () => {
+    clearTimeout($('detailSearchInput')._debounce);
+    $('detailSearchInput')._debounce = setTimeout(_detailSearch, 200);
+  });
+  $('detailSearchInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!_detailSearchMatches.length) return;
+      const next = e.shiftKey
+        ? (_detailSearchIdx - 1 + _detailSearchMatches.length) % _detailSearchMatches.length
+        : (_detailSearchIdx + 1) % _detailSearchMatches.length;
+      _detailNavTo(next);
+    }
+    if (e.key === 'Escape') {
+      _detailClearSearch();
+      $('detailSearchWrap').style.display = 'none';
+    }
+  });
+  $('detailSearchNext')?.addEventListener('click', () => {
+    if (!_detailSearchMatches.length) return;
+    _detailNavTo((_detailSearchIdx + 1) % _detailSearchMatches.length);
+  });
+  $('detailSearchPrev')?.addEventListener('click', () => {
+    if (!_detailSearchMatches.length) return;
+    _detailNavTo((_detailSearchIdx - 1 + _detailSearchMatches.length) % _detailSearchMatches.length);
+  });
+  $('detailSearchClose')?.addEventListener('click', () => {
+    _detailClearSearch();
+    $('detailSearchInput').value = '';
+    $('detailSearchWrap').style.display = 'none';
+  });
 
   buildNetHeader();
 }
@@ -1828,14 +2009,38 @@ function closeNetDetail() {
   );
 }
 
+function _estimateSize(val) {
+  if (val == null) return 0;
+  if (typeof val === 'string') return val.length;
+  try { return JSON.stringify(val).length; } catch { return 0; }
+}
+
+function _formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / 1048576).toFixed(1)}MB`;
+}
+
 function renderNetDetailTabs(r) {
   const tabs = $('netDetailTabs');
   tabs.innerHTML = '';
-  ['Headers', 'Request', 'Preview', 'Response'].forEach(label => {
-    const key = label.toLowerCase();
+
+  const tabDefs = [
+    { label: 'Headers', key: 'headers' },
+    { label: 'Request', key: 'request', sizeFrom: 'requestBody' },
+    { label: 'Preview', key: 'preview', sizeFrom: 'responseBody' },
+    { label: 'Response', key: 'response', sizeFrom: 'responseBody' },
+  ];
+
+  tabDefs.forEach(({ label, key, sizeFrom }) => {
     const btn = document.createElement('button');
     btn.className = 'detail-tab' + (r._tab === key ? ' active' : '');
-    btn.textContent = label;
+    let text = label;
+    if (sizeFrom && r[sizeFrom]) {
+      const size = _estimateSize(r[sizeFrom]);
+      if (size > 0) text += ` (${_formatBytes(size)})`;
+    }
+    btn.textContent = text;
     btn.addEventListener('click', () => {
       r._tab = key;
       tabs.querySelectorAll('.detail-tab').forEach(b => b.classList.remove('active'));
@@ -1844,6 +2049,12 @@ function renderNetDetailTabs(r) {
     });
     tabs.appendChild(btn);
   });
+
+  // Show search box for Preview/Response tabs
+  const searchWrap = $('detailSearchWrap');
+  if (searchWrap) {
+    searchWrap.style.display = (r._tab === 'preview' || r._tab === 'response' || r._tab === 'headers') ? 'flex' : 'none';
+  }
 }
 
 function renderNetDetailContent(r) {
