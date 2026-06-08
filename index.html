@@ -90,6 +90,18 @@
 
   </div>
 
+  <!-- Load order: app.js (state/helpers) → panels → init.js (IPC/boot) -->
   <script src="app.js"></script>
+  <script src="panels/settings.js"></script>
+  <script src="panels/console.js"></script>
+  <script src="panels/network.js"></script>
+  <script src="panels/ga4.js"></script>
+  <script src="panels/redux.js"></script>
+  <script src="panels/storage.js"></script>
+  <script src="panels/performance.js"></script>
+  <script src="panels/native.js"></script>
+  <script src="panels/react.js"></script>
+  <script src="panels/sources.js"></script>
+  <script src="init.js"></script>
 </body>
 </html>

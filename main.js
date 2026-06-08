@@ -375,6 +375,7 @@ function startReactDevToolsServer() {
 function startBridgeServers() {
   // Redux Bridge
   startBridge(PORTS.REDUX_BRIDGE, 'redux', reduxClients, (event) => {
+    // console.log('[REDUX-DEBUG] Event from SDK:', event?.type, event?.action?.type);
     _send('redux-event', event);
   });
 

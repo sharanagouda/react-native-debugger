@@ -1,0 +1,187 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// init.js — IPC wiring, button handlers, memory monitor, and panel initialization
+// This file loads LAST — after app.js (state/helpers) and all panel scripts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── CDP Button ───────────────────────────────────────────────────────────────
+$('btnCDP')?.addEventListener('click', () => {
+  window.electronAPI?.openCDPTarget(null);
+});
+
+// ─── Screenshot Button ────────────────────────────────────────────────────────
+$('btnScreenshot')?.addEventListener('click', takeScreenshot);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IPC from Main
+// ─────────────────────────────────────────────────────────────────────────────
+if (window.electronAPI) {
+  window.electronAPI.on('ports', ports => { state.ports = ports; });
+
+  window.electronAPI.on('cdp-targets', targets => {
+    state.cdpTargets = targets;
+    const btn = $('btnCDP');
+    if (btn) {
+      const hasCDP = targets?.length > 0;
+      const port = state.ports?.METRO || getStoredMetroPort();
+      btn.textContent = hasCDP
+        ? `JS Debugger (:${port}) [${targets.length}] ↗`
+        : `JS Debugger (:${port}) ↗`;
+      btn.style.opacity = hasCDP ? '1' : '0.5';
+      if (hasCDP) {
+        btn.onclick = () => window.electronAPI.openCDPTarget(targets[0].webSocketDebuggerUrl);
+      }
+    }
+  });
+
+  window.electronAPI.on('redux-event', handleReduxEvent);
+  window.electronAPI.on('network-event', handleNetworkEvent);
+  window.electronAPI.on('storage-event', handleStorageEvent);
+
+  window.electronAPI.on('console-event', addConsoleLog);
+  window.electronAPI.on('ga4-event', handleGA4Event);
+
+  window.electronAPI.on('perf-event', event => {
+    handlePerfEvent(event);
+    handleMemoryEvent(event);
+  });
+
+  window.electronAPI.on('clear-all-ui', clearAll);
+
+  // When all device bridges disconnect, release heavy memory but keep logs visible.
+  // Debounced to avoid data loss during hot reloads or flaky connections.
+  let _disconnectTimer = null;
+  window.electronAPI.on('device-all-disconnected', () => {
+    clearTimeout(_disconnectTimer);
+    _disconnectTimer = setTimeout(() => {
+      console.log('[App] All devices disconnected — freeing memory');
+      freeMemory();
+    }, 3000);
+  });
+  // Cancel pending free if a device reconnects
+  const _cancelDisconnectTimer = () => { clearTimeout(_disconnectTimer); _disconnectTimer = null; };
+  window.electronAPI.on('redux-connected', on => { if (on) _cancelDisconnectTimer(); updateDeviceBanner('redux', on); });
+  window.electronAPI.on('network-connected', on => { if (on) _cancelDisconnectTimer(); updateDeviceBanner('network', on); });
+  window.electronAPI.on('storage-connected', on => { if (on) _cancelDisconnectTimer(); updateDeviceBanner('storage', on); });
+  window.electronAPI.on('react-dt-status', on => { updateDeviceBanner('reactDT', on); });
+
+  // Cmd+F — focus the search input for the active panel
+  function _handleFind() {
+    if (state.activePanel === 'network' && state.network.selectedId) {
+      const wrap = $('detailSearchWrap');
+      const input = $('detailSearchInput');
+      if (wrap && input) {
+        wrap.style.display = 'flex';
+        input.focus();
+        input.select();
+        return;
+      }
+    }
+    const searchMap = {
+      console: 'consoleSearch',
+      network: 'netSearchInput',
+      ga4: 'ga4Search',
+      redux: 'reduxSearch',
+      storage: 'storageSearch',
+    };
+    const inputId = searchMap[state.activePanel];
+    if (inputId) {
+      const el = $(inputId);
+      if (el) { el.focus(); el.select(); }
+    }
+    if (state.activePanel === 'console') {
+      const bar = $('consoleFindBar');
+      if (bar) { bar.style.display = 'flex'; $('consoleFindInput')?.focus(); }
+    }
+  }
+  window.electronAPI.on('focus-search', _handleFind);
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      e.preventDefault();
+      _handleFind();
+    }
+  });
+
+  window.electronAPI.on('app-version', (version, isPackaged) => {
+    state._appVersion = version;
+    state._isPackaged = !!isPackaged;
+    document.querySelectorAll('#aboutVersion').forEach(el => el.textContent = 'v' + version);
+  });
+
+  window.electronAPI.on('update-available', ({ current, latest, autoUpdate }) => {
+    state._updateAvailable = { current, latest, autoUpdate };
+    _applyUpdateBanner();
+  });
+
+  window.electronAPI.on('update-downloaded', ({ version }) => {
+    state._updateDownloaded = version;
+    _applyUpdateBanner();
+  });
+
+  window.electronAPI.on('trigger-open-cdp', () => {
+    window.electronAPI?.openCDPTarget(null);
+  });
+
+  window.electronAPI.on('theme-changed', theme => {
+    document.documentElement.setAttribute('data-theme', theme);
+    setStoredTheme(theme);
+    document.querySelectorAll('#themeSwitcher .theme-card')
+      .forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
+  });
+}
+
+// ─── Memory Monitor ──────────────────────────────────────────────────────────
+let _memoryWarningShown = false;
+setInterval(() => {
+  if (!window.performance || !performance.memory) return;
+  const used = performance.memory.usedJSHeapSize;
+  const limit = performance.memory.jsHeapSizeLimit;
+  const pct = used / limit;
+  if (pct > 0.7 && !_memoryWarningShown) {
+    _memoryWarningShown = true;
+    const banner = document.createElement('div');
+    banner.id = 'memoryWarning';
+    banner.className = 'memory-warning';
+    const usedMB = Math.round(used / 1024 / 1024);
+    banner.innerHTML = `<span>High memory usage (${usedMB}MB) — ReactoRadar may become unresponsive.</span>`
+      + `<button class="memory-warn-btn" id="memWarnClear">Clear All Data</button>`
+      + `<button class="memory-warn-btn" id="memWarnDismiss">Dismiss</button>`;
+    document.body.prepend(banner);
+    $('memWarnClear')?.addEventListener('click', () => {
+      state.console.logs = []; _consolePending = [];
+      _lastLogMsg = ''; _lastLogRow = null; _lastLogCount = 1;
+      $('cBadge').textContent = '0'; renderConsole();
+      state.network.requests = {}; state.network.order = []; state.network.selectedId = null;
+      $('nBadge').textContent = '0'; renderNetwork();
+      state.redux.actions = []; state.redux.states = []; state.redux.selected = -1;
+      $('rBadge').textContent = '0'; renderRedux();
+      banner.remove(); _memoryWarningShown = false;
+    });
+    $('memWarnDismiss')?.addEventListener('click', () => { banner.remove(); });
+  }
+  if (pct < 0.5) _memoryWarningShown = false;
+}, 30000);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Apply saved settings on load
+// ─────────────────────────────────────────────────────────────────────────────
+applyTheme(getStoredTheme());
+applyFontSize(getStoredFontSize());
+applyFontFamily(getStoredFontFamily());
+applyAppName(getStoredAppName());
+applyTabVisibility();
+window.electronAPI?.setMetroPort(getStoredMetroPort());
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT — Panel initialization (all panel scripts must be loaded before this)
+// ─────────────────────────────────────────────────────────────────────────────
+initConsolePanel();
+initNetworkPanel();
+initGA4Panel();
+initPerformancePanel();
+initMemoryPanel();
+initReduxPanel();
+initStoragePanel();
+initReactPanel();
+initSourcesPanel();
+initNativeLogsPanel();
+initSettingsPanel();
