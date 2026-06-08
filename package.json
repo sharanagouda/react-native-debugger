@@ -1,7 +1,7 @@
 {
   "name": "reactoradar",
   "productName": "ReactoRadar",
-  "version": "1.6.6",
+  "version": "1.6.7",
   "description": "macOS debugger for React Native — Console, Sources, Network, Performance, Memory, Redux, AsyncStorage, React tree. Supports RN 0.74+ with Hermes and New Architecture.",
   "main": "main.js",
   "bin": {
@@ -36,11 +36,13 @@
     "preload.js",
     "index.html",
     "app.js",
+    "init.js",
+    "panels/",
     "styles.css",
     "sdk/",
     "bin/",
     "assets/",
-    "src/"
+    "AGENTS.md"
   ],
   "scripts": {
     "start": "unset ELECTRON_RUN_AS_NODE && electron .",
