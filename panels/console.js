@@ -1,5 +1,4 @@
-// ─── Console Panel ─────────────────────────────────────────────────────────
-
+// ─── Console Panel + Shared Renderers ─────────────────────────────────────
 // Load saved log level filters from localStorage
 function getStoredLogLevels() {
   try {
@@ -14,6 +13,7 @@ function setStoredLogLevels(levels) {
 
 function initConsolePanel() {
   const panel = $('panel-console');
+  if (!panel) return;
   const levels = getStoredLogLevels();
   state.console.levelFilters = levels;
   state.console.showRedux = !!levels.redux;
@@ -321,10 +321,10 @@ function flushConsoleBatch() {
   }
 }
 
-// NOTE: console-event IPC listener is registered in init.js (not here)
-// to keep all IPC registrations in one place and avoid duplicate listener issues.
 
-// ─── Shared Object Tree Renderer (Chrome DevTools-like) ──────────────────────
+// NOTE: console-event IPC listener is registered in init.js
+
+// ─── Object Tree Renderer (Chrome DevTools-like) ─────────────────────────────
 // Builds interactive, collapsible DOM nodes for objects/arrays.
 
 // Collect all entries for an object: own data properties + prototype getter values.
@@ -709,7 +709,7 @@ function buildLogRow(l) {
   return div;
 }
 
-// ─── Shared Context Menu ─────────────────────────────────────────────────────
+// ─── Shared context menu helper ──────────────────────────────────────────────
 function showContextMenu(e, items) {
   document.querySelectorAll('.ctx-menu').forEach(el => el.remove());
   const menu = document.createElement('div');
@@ -786,3 +786,4 @@ function renderConsole() {
   list.appendChild(frag);
   list.scrollTop = list.scrollHeight;
 }
+

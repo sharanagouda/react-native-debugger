@@ -1,8 +1,10 @@
+// ─── Redux Panel ───────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
-// REDUX PANEL — extracted from app.js
+// REDUX PANEL
 // ─────────────────────────────────────────────────────────────────────────────
 function initReduxPanel() {
   const panel = $('panel-redux');
+  if (!panel) return;
   panel.innerHTML = `
     <div class="panel-toolbar">
       <span class="panel-label">Redux</span>
@@ -436,3 +438,4 @@ function renderRedux() {
     selEl.scrollIntoView({ block: 'nearest', behavior: 'auto' });
   }
 }
+

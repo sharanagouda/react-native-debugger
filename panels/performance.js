@@ -1,8 +1,12 @@
-// ─── Performance + Memory Panel ────────────────────────────────────────────
+// ─── Performance + Memory Panels ───────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// PERFORMANCE PANEL — FPS, render timing, JS thread
+// ─────────────────────────────────────────────────────────────────────────────
 const perfState = { fps: [], jsThread: [], uiThread: [], recording: false, data: [] };
 
 function initPerformancePanel() {
   const panel = $('panel-performance');
+  if (!panel) return;
   panel.innerHTML = `
     <div class="panel-toolbar">
       <span class="panel-label">Performance</span>
@@ -130,9 +134,12 @@ function handlePerfEvent(event) {
   }
 }
 
-// ─── Memory Panel ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// MEMORY PANEL — Heap snapshot summary via Hermes CDP
+// ─────────────────────────────────────────────────────────────────────────────
 function initMemoryPanel() {
   const panel = $('panel-memory');
+  if (!panel) return;
   panel.innerHTML = `
     <div class="panel-toolbar">
       <span class="panel-label">Memory</span>

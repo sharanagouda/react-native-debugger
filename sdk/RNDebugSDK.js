@@ -14,7 +14,7 @@
  *   watchAsyncStorage(); // call once early in app
  */
 
-if (!__DEV__) {
+if (typeof __DEV__ === 'undefined' || !__DEV__) {
   module.exports = { reduxEnhancer: x => x, reduxMiddleware: () => next => action => next(action), watchAsyncStorage: () => {} };
 } else {
 
@@ -80,29 +80,38 @@ function _shouldIntercept() {
 
 // ─── WebSocket Factory ────────────────────────────────────────────────────────
 function makeChannel(port, name, onMessage) {
-  let ws = null, queue = [], connected = false;
+  let ws = null, queue = [], connected = false, retryDelay = 2000;
 
   function connect() {
+    ws = null;
+    connected = false;
     try {
       ws = new WebSocket(`ws://${HOST}:${port}`);
       ws.onopen = () => {
         connected = true;
-        queue.forEach(m => ws.send(m));
-        queue = [];
+        retryDelay = 2000;
+        const pending = queue.splice(0);
+        for (const m of pending) {
+          try { if (ws.readyState === WebSocket.OPEN) ws.send(m); else { queue.push(m); break; } }
+          catch { queue.push(m); break; }
+        }
       };
       ws.onmessage = (evt) => {
         if (onMessage) {
           try { onMessage(JSON.parse(evt.data)); } catch {}
         }
       };
-      ws.onclose = () => { connected = false; setTimeout(connect, 2000); };
+      ws.onclose = () => { connected = false; setTimeout(connect, retryDelay); retryDelay = Math.min(retryDelay * 1.5, 30000); };
       ws.onerror = () => {};
-    } catch { setTimeout(connect, 2000); }
+    } catch { setTimeout(connect, retryDelay); retryDelay = Math.min(retryDelay * 1.5, 30000); }
   }
 
   function send(obj) {
-    const msg = JSON.stringify({ ...obj, ts: Date.now() });
-    if (connected && ws?.readyState === WebSocket.OPEN) ws.send(msg);
+    let msg;
+    try {
+      msg = JSON.stringify({ ...obj, ts: Date.now() }, (_, v) => typeof v === 'bigint' ? v.toString() : v);
+    } catch { return; }
+    if (connected && ws?.readyState === WebSocket.OPEN) { try { ws.send(msg); } catch {} }
     else { queue.push(msg); if (queue.length > 300) queue.shift(); }
   }
 
@@ -186,21 +195,25 @@ function _extractCaller() {
 }
 
 LEVELS.forEach(level => {
-  _console[level] = console[level].bind(console);
+  const orig = console[level];
+  if (typeof orig !== 'function') return;
+  _console[level] = orig.bind(console);
   console[level] = (...args) => {
-    _console[level](...args);
-    // Skip interception when SDK is paused or debugger is attached
-    // This prevents double-logging and message queue deadlocks with CDP
-    if (!_shouldIntercept()) return;
-    const structuredArgs = args.map(serializeArg);
-    const message = args.map(a => {
-      if (typeof a === 'string') return a;
-      try { return JSON.stringify(a, null, 2); } catch { return String(a); }
-    }).join(' ');
-    // Stack trace capture controlled by toggle (disabled by default for performance)
-    // When enabled: captures for all levels. When disabled: skips entirely.
-    const caller = _stackTraceEnabled ? _extractCaller() : '';
-    mainCh.send({ type: 'console', level, message, args: structuredArgs, caller });
+    try { _console[level](...args); } catch {}
+    try {
+      // Skip interception when SDK is paused or debugger is attached
+      // This prevents double-logging and message queue deadlocks with CDP
+      if (!_shouldIntercept()) return;
+      const structuredArgs = args.map(serializeArg);
+      const message = args.map(a => {
+        if (typeof a === 'string') return a;
+        try { return JSON.stringify(a, null, 2); } catch { return String(a); }
+      }).join(' ');
+      // Stack trace capture controlled by toggle (disabled by default for performance)
+      // When enabled: captures for all levels. When disabled: skips entirely.
+      const caller = _stackTraceEnabled ? _extractCaller() : '';
+      mainCh.send({ type: 'console', level, message, args: structuredArgs, caller });
+    } catch {} // end of interception try
   };
 });
 
@@ -250,17 +263,31 @@ global.fetch = async (input, init = {}) => {
   const t0 = Date.now();
   try {
     const resp = await _fetch(input, init);
-    const clone = resp.clone();
-    clone.text().then(body => {
-      if (!_networkCaptureEnabled) return;
-      let parsed = body;
-      try { parsed = JSON.parse(body); } catch {}
-      const rHeaders = {};
-      clone.headers?.forEach?.((v, k) => { rHeaders[k] = v; });
-      mainCh.send({ type: 'network', phase: 'response', id, url, method,
-        status: resp.status, statusText: resp.statusText,
-        duration: Date.now() - t0, responseHeaders: rHeaders, responseBody: parsed });
-    }).catch(() => {});
+    try {
+      const contentType = resp.headers?.get?.('content-type') || '';
+      const contentLen = parseInt(resp.headers?.get?.('content-length') || '0', 10);
+      if (contentLen > 1_000_000 || /image|video|audio|octet-stream|font/i.test(contentType)) {
+        const rHeaders = {};
+        resp.headers?.forEach?.((v, k) => { rHeaders[k] = v; });
+        mainCh.send({ type: 'network', phase: 'response', id, url: String(typeof input === 'string' ? input : input?.url || ''),
+          method, status: resp.status, statusText: resp.statusText, duration: Date.now() - t0,
+          responseHeaders: rHeaders, responseBody: `[Binary ${contentType} — ${contentLen} bytes]` });
+      } else {
+        try {
+          const clone = resp.clone();
+          clone.text().then(body => {
+            if (!_networkCaptureEnabled) return;
+            let parsed = body;
+            try { parsed = JSON.parse(body); } catch {}
+            const rHeaders = {};
+            clone.headers?.forEach?.((v, k) => { rHeaders[k] = v; });
+            mainCh.send({ type: 'network', phase: 'response', id, url, method,
+              status: resp.status, statusText: resp.statusText,
+              duration: Date.now() - t0, responseHeaders: rHeaders, responseBody: parsed });
+          }).catch(() => {});
+        } catch {} // clone failed — skip capture
+      }
+    } catch {} // header access failed
     return resp;
   } catch (err) {
     mainCh.send({ type: 'network', phase: 'error', id, url, method,
@@ -292,6 +319,7 @@ global.fetch = async (input, init = {}) => {
         meta.method = (method || 'GET').toUpperCase();
         meta.url = String(url);
         meta.t0 = Date.now();
+        meta.sent = false;
         return _open.apply(xhr, arguments);
       };
 
@@ -452,13 +480,33 @@ function reduxEnhancer(createStore) {
     let actionCount = 0;
 
     // Send initial state
-    reduxCh.send({ type: 'redux', action: { type: '@@INIT' }, nextState: store.getState(), index: actionCount++ });
+    try {
+      const initState = store.getState();
+      let safeInit;
+      try {
+        const s = JSON.stringify(initState, (_, v) => typeof v === 'bigint' ? v.toString() : v);
+        safeInit = s.length > 1_000_000 ? { __truncated: true, sizeBytes: s.length, keys: Object.keys(initState) } : JSON.parse(s);
+      } catch { safeInit = { __error: 'State not serializable' }; }
+      reduxCh.send({ type: 'redux', action: { type: '@@INIT' }, nextState: safeInit, index: actionCount++ });
+    } catch {}
 
     const origDispatch = store.dispatch;
     store.dispatch = (action) => {
       const result = origDispatch(action);
-      const nextState = store.getState();
-      reduxCh.send({ type: 'redux', action, nextState, index: actionCount++ });
+      try {
+        const nextState = store.getState();
+        const safeAction = typeof action === 'function'
+          ? { type: `[Function: ${action.name || 'thunk'}]` }
+          : (action || { type: '@@UNKNOWN' });
+        let safeState;
+        try {
+          const s = JSON.stringify(nextState, (_, v) => typeof v === 'bigint' ? v.toString() : v);
+          safeState = s.length > 1_000_000
+            ? { __truncated: true, sizeBytes: s.length, keys: Object.keys(nextState) }
+            : JSON.parse(s);
+        } catch { safeState = { __error: 'State not serializable' }; }
+        reduxCh.send({ type: 'redux', action: safeAction, nextState: safeState, index: actionCount++ });
+      } catch {}
       return result;
     };
     return store;
@@ -467,9 +515,23 @@ function reduxEnhancer(createStore) {
 
 // ─── Redux Toolkit middleware (alternative) ───────────────────────────────────
 // If you use RTK configureStore, add this to middleware array instead:
+let _mwActionCount = 0;
 const reduxMiddleware = store => next => action => {
   const result = next(action);
-  reduxCh.send({ type: 'redux', action, nextState: store.getState() });
+  try {
+    const nextState = store.getState();
+    const safeAction = typeof action === 'function'
+      ? { type: `[Function: ${action.name || 'thunk'}]` }
+      : (action || { type: '@@UNKNOWN' });
+    let safeState;
+    try {
+      const s = JSON.stringify(nextState, (_, v) => typeof v === 'bigint' ? v.toString() : v);
+      safeState = s.length > 1_000_000
+        ? { __truncated: true, sizeBytes: s.length, keys: Object.keys(nextState) }
+        : JSON.parse(s);
+    } catch { safeState = { __error: 'State not serializable' }; }
+    reduxCh.send({ type: 'redux', action: safeAction, nextState: safeState, index: _mwActionCount++ });
+  } catch {}
   return result;
 };
 
@@ -510,7 +572,7 @@ function watchAsyncStorage() {
     RNAsyncStorage.mergeItem = async (key, value, ...rest) => {
       const result = await _mergeItem(key, value, ...rest);
       // Read back merged value
-      RNAsyncStorage.getItem(key).then(v => storageCh.send({ type: 'storage', action: 'set', key, value: v }));
+      RNAsyncStorage.getItem(key).then(v => storageCh.send({ type: 'storage', action: 'set', key, value: v })).catch(() => {});
       return result;
     };
 

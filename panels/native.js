@@ -1,4 +1,7 @@
 // ─── Native Logs Panel ─────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// NATIVE LOGS PANEL
+// ─────────────────────────────────────────────────────────────────────────────
 const _nativeState = { logs: [], connected: false, platform: null, levelFilter: 'all', searchFilter: '' };
 const MAX_NATIVE_LOGS = 2000;
 
@@ -254,3 +257,4 @@ function _renderNativeLogs() {
   list.innerHTML = '';
   _nativeState.logs.forEach(log => _appendNativeLog(log));
 }
+

@@ -1,8 +1,10 @@
+// ─── AsyncStorage Panel ────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
-// ASYNC STORAGE PANEL — extracted from app.js
+// ASYNC STORAGE PANEL
 // ─────────────────────────────────────────────────────────────────────────────
 function initStoragePanel() {
   const panel = $('panel-storage');
+  if (!panel) return;
   panel.innerHTML = `
     <div class="panel-toolbar">
       <span class="panel-label">AsyncStorage</span>
@@ -183,3 +185,7 @@ function formatSize(bytes) {
   if (bytes < 1024) return `${bytes}b`;
   return `${(bytes/1024).toFixed(1)}kb`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REACT TREE PANEL
+// ─────────────────────────────────────────────────────────────────────────────

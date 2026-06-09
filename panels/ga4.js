@@ -1,10 +1,12 @@
+// ─── GA4 Events Panel ──────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
-// GA4 EVENT INSPECTOR — extracted from app.js
+// GA4 EVENT INSPECTOR
 // ─────────────────────────────────────────────────────────────────────────────
 const ga4State = { events: [], selected: -1, searchFilter: '', sortDir: 'desc' };
 
 function initGA4Panel() {
   const panel = $('panel-ga4');
+  if (!panel) return;
   panel.innerHTML = `
     <div class="panel-toolbar">
       <span class="panel-label">GA4 Events</span>
@@ -326,3 +328,4 @@ function renderGA4Summary() {
     summary.appendChild(chip);
   });
 }
+

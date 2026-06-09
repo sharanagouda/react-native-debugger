@@ -5,7 +5,8 @@
 
 // ─── CDP Button ───────────────────────────────────────────────────────────────
 $('btnCDP')?.addEventListener('click', () => {
-  window.electronAPI?.openCDPTarget(null);
+  // Tell main process to open the CDP DevTools window with the best available target
+  window.electronAPI?.openCDPTarget(null); // null = use latest known target
 });
 
 // ─── Screenshot Button ────────────────────────────────────────────────────────
@@ -37,7 +38,6 @@ if (window.electronAPI) {
   window.electronAPI.on('network-event', handleNetworkEvent);
   window.electronAPI.on('storage-event', handleStorageEvent);
 
-  window.electronAPI.on('console-event', addConsoleLog);
   window.electronAPI.on('ga4-event', handleGA4Event);
 
   window.electronAPI.on('perf-event', event => {
@@ -66,6 +66,7 @@ if (window.electronAPI) {
 
   // Cmd+F — focus the search input for the active panel
   function _handleFind() {
+    // If network detail is open, focus the detail search
     if (state.activePanel === 'network' && state.network.selectedId) {
       const wrap = $('detailSearchWrap');
       const input = $('detailSearchInput');
@@ -88,12 +89,14 @@ if (window.electronAPI) {
       const el = $(inputId);
       if (el) { el.focus(); el.select(); }
     }
+    // Also show/focus Console bottom find bar
     if (state.activePanel === 'console') {
       const bar = $('consoleFindBar');
       if (bar) { bar.style.display = 'flex'; $('consoleFindInput')?.focus(); }
     }
   }
   window.electronAPI.on('focus-search', _handleFind);
+  // Direct keyboard fallback — Electron menu accelerators can miss in some contexts
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
       e.preventDefault();
@@ -104,6 +107,7 @@ if (window.electronAPI) {
   window.electronAPI.on('app-version', (version, isPackaged) => {
     state._appVersion = version;
     state._isPackaged = !!isPackaged;
+    // Update anywhere the version is displayed
     document.querySelectorAll('#aboutVersion').forEach(el => el.textContent = 'v' + version);
   });
 
@@ -121,21 +125,27 @@ if (window.electronAPI) {
     window.electronAPI?.openCDPTarget(null);
   });
 
+  // Theme toggle from menu shortcut (Cmd+Shift+T)
   window.electronAPI.on('theme-changed', theme => {
     document.documentElement.setAttribute('data-theme', theme);
     setStoredTheme(theme);
     document.querySelectorAll('#themeSwitcher .theme-card')
       .forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
   });
+
+  // Console event IPC
+  window.electronAPI.on('console-event', addConsoleLog);
 }
 
 // ─── Memory Monitor ──────────────────────────────────────────────────────────
+// Check memory usage periodically and warn user before it causes blank screen
 let _memoryWarningShown = false;
 setInterval(() => {
   if (!window.performance || !performance.memory) return;
   const used = performance.memory.usedJSHeapSize;
   const limit = performance.memory.jsHeapSizeLimit;
   const pct = used / limit;
+  // Warn at 70% usage
   if (pct > 0.7 && !_memoryWarningShown) {
     _memoryWarningShown = true;
     const banner = document.createElement('div');
@@ -147,6 +157,7 @@ setInterval(() => {
       + `<button class="memory-warn-btn" id="memWarnDismiss">Dismiss</button>`;
     document.body.prepend(banner);
     $('memWarnClear')?.addEventListener('click', () => {
+      // Clear all panel data
       state.console.logs = []; _consolePending = [];
       _lastLogMsg = ''; _lastLogRow = null; _lastLogCount = 1;
       $('cBadge').textContent = '0'; renderConsole();
@@ -158,17 +169,19 @@ setInterval(() => {
     });
     $('memWarnDismiss')?.addEventListener('click', () => { banner.remove(); });
   }
+  // Reset flag when memory drops
   if (pct < 0.5) _memoryWarningShown = false;
-}, 30000);
+}, 30000); // Check every 30 seconds
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Apply saved settings on load
-// ─────────────────────────────────────────────────────────────────────────────
+// Apply saved theme + font size + font family + app name on load
+
 applyTheme(getStoredTheme());
 applyFontSize(getStoredFontSize());
 applyFontFamily(getStoredFontFamily());
 applyAppName(getStoredAppName());
 applyTabVisibility();
+
+// Send stored metro port to backend
 window.electronAPI?.setMetroPort(getStoredMetroPort());
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -182,6 +195,5 @@ initMemoryPanel();
 initReduxPanel();
 initStoragePanel();
 initReactPanel();
-initSourcesPanel();
 initNativeLogsPanel();
 initSettingsPanel();

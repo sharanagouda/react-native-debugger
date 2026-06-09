@@ -136,6 +136,8 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// Global filter removed — each panel has its own search input
+
 // ─── Clear (each panel has its own clear button now) ─────────────────────────
 
 function clearActiveTab() {
@@ -236,28 +238,28 @@ function clearAll() {
   if (ga4Detail) ga4Detail.innerHTML = '';
   // Native logs
   _nativeState.logs = [];
-  const nativeList2 = $('nativeLogList');
-  if (nativeList2) nativeList2.innerHTML = '';
+  const nativeList = $('nativeLogList');
+  if (nativeList) nativeList.innerHTML = '';
   // Performance
   perfState.fps = [];
   perfState.jsThread = [];
   perfState.uiThread = [];
   perfState.data = [];
-  const perfFPS2 = $('perfFPS'); if (perfFPS2) perfFPS2.textContent = '—';
-  const perfJS2 = $('perfJS'); if (perfJS2) perfJS2.textContent = '—';
-  const perfUI2 = $('perfUI'); if (perfUI2) perfUI2.textContent = '—';
+  const perfFPS = $('perfFPS'); if (perfFPS) perfFPS.textContent = '—';
+  const perfJS = $('perfJS'); if (perfJS) perfJS.textContent = '—';
+  const perfUI = $('perfUI'); if (perfUI) perfUI.textContent = '—';
   clearPerfCanvas('perfFPSCanvas');
   clearPerfCanvas('perfJSCanvas');
   clearPerfCanvas('perfUICanvas');
   // Memory
-  const memHU2 = $('memHeapUsed'); if (memHU2) memHU2.textContent = '—';
-  const memHT2 = $('memHeapTotal'); if (memHT2) memHT2.textContent = '—';
-  const memN2 = $('memNative'); if (memN2) memN2.textContent = '—';
+  const memHU = $('memHeapUsed'); if (memHU) memHU.textContent = '—';
+  const memHT = $('memHeapTotal'); if (memHT) memHT.textContent = '—';
+  const memN = $('memNative'); if (memN) memN.textContent = '—';
   // Badges
-  $('cBadge').textContent = '0';
-  $('nBadge').textContent = '0';
-  $('rBadge').textContent = '0';
-  $('sBadge').textContent = '0';
+  const cB = $('cBadge'); if (cB) cB.textContent = '0';
+  const nB = $('nBadge'); if (nB) nB.textContent = '0';
+  const rB = $('rBadge'); if (rB) rB.textContent = '0';
+  const sB = $('sBadge'); if (sB) sB.textContent = '0';
   if ($('ga4Badge')) $('ga4Badge').textContent = '0';
   if ($('nativeBadge')) $('nativeBadge').textContent = '0';
   // Re-render all
@@ -281,13 +283,8 @@ function freeMemory() {
   if (state.console.logs.length > 200) {
     state.console.logs = state.console.logs.slice(-200);
   }
-  // Trim Redux history (keep actions and states in sync — they must have same length)
-  if (state.redux.actions.length > 50) {
-    state.redux.actions = state.redux.actions.slice(-50);
-    state.redux.states = state.redux.states.slice(-50);
-    state.redux.actions.forEach((a, i) => a.index = i);
-    state.redux.selected = -1;
-  }
+  // Drop full Redux state snapshots (keep action metadata)
+  state.redux.states = [];
   // Drop storage values (keep keys for reference)
   for (const k in state.storage.entries) {
     state.storage.entries[k] = null;
@@ -327,11 +324,13 @@ function updateDeviceBanner(service, connected) {
   }
 }
 
+
 function takeScreenshot() {
   const btn = $('btnScreenshot');
   if (!btn) return;
   const origText = btn.innerHTML;
   btn.innerHTML = '<span style="opacity:0.6">Saving...</span>';
+  // Use Electron's native capturePage — always works, no DOM rendering issues
   window.electronAPI?.captureScreenshot();
   btn.innerHTML = '<span style="color:var(--green)">Saved!</span>';
   setTimeout(() => { btn.innerHTML = origText; }, 2000);

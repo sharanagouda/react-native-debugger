@@ -1,5 +1,7 @@
 // ─── Network Panel ─────────────────────────────────────────────────────────
-
+// ─────────────────────────────────────────────────────────────────────────────
+// NETWORK PANEL (Chrome DevTools-style)
+// ─────────────────────────────────────────────────────────────────────────────
 const NET_COLS = [
   { key: 'name',      label: 'Name',      width: 380, min: 150 },
   { key: 'status',    label: 'Status',    width: 60,  min: 40 },
@@ -12,6 +14,7 @@ const NET_COLS = [
 
 function initNetworkPanel() {
   const panel = $('panel-network');
+  if (!panel) return;
   panel.innerHTML = `
     <div class="panel-toolbar">
       <span class="panel-label">Network</span>
@@ -966,3 +969,4 @@ function buildCurlCommand(r) {
   }
   return cmd;
 }
+

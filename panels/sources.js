@@ -1,6 +1,10 @@
 // ─── Sources Panel ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SOURCES PANEL (placeholder — use JS Debugger button for breakpoints)
+// ─────────────────────────────────────────────────────────────────────────────
 function initSourcesPanel() {
   const panel = $('panel-sources');
+  if (!panel) return;
   panel.innerHTML = `
     <div class="panel-toolbar">
       <span class="panel-label">Sources</span>
@@ -280,3 +284,6 @@ async function loadSourceFile(filepath) {
 function updateSourcesPanel(targets) {
   // No-op: file list is populated by fetchSourceFileList from Metro source map
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PERFORMANCE PANEL — FPS, render timing, JS thread

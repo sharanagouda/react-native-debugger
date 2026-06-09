@@ -1,6 +1,7 @@
 // ─── React Tree Panel ──────────────────────────────────────────────────────
 function initReactPanel() {
   const panel = $('panel-react');
+  if (!panel) return;
   panel.innerHTML = `
     <div class="panel-toolbar">
       <span class="panel-label">React Tree</span>
@@ -19,3 +20,4 @@ function initReactPanel() {
     window.electronAPI?.openReactDevTools();
   });
 }
+

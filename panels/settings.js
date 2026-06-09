@@ -1,6 +1,4 @@
-// ─── Settings Panel ────────────────────────────────────────────────────────
-
-// ─── Theme helpers ───────────────────────────────────────────────────────────
+// ─── Settings Panel + Shared Utilities ─────────────────────────────────────
 function getStoredTheme() {
   try { return localStorage.getItem('rn-debug-theme') || 'dark'; } catch { return 'dark'; }
 }
@@ -303,6 +301,7 @@ function applyFontSize(size) {
 
 function initSettingsPanel() {
   const panel = $('panel-settings');
+  if (!panel) return;
   const current = getStoredTheme();
   const currentSize = getStoredFontSize();
    panel.innerHTML = `
@@ -594,13 +593,12 @@ function _loadVersionHistory() {
         } catch { /* skip bad date */ }
       }
 
-      // Build action buttons based on install type
+      // Build action button based on install type
       let actionHtml = '';
       if (isCurrent) {
         actionHtml = '<span class="version-installed">Installed</span>';
       } else if (isPackaged) {
-        // Show download dropdown with .dmg and .zip links
-        actionHtml = '<div class="version-dl-wrap"><button class="version-install-btn" title="Download this version">Download ▾</button></div>';
+        actionHtml = '<button class="version-install-btn" title="Download .dmg for this version">Download</button>';
       } else {
         actionHtml = `<button class="version-npm-btn" title="Copy npm install command">npx @${esc(r.version)}</button>`;
       }
@@ -615,57 +613,14 @@ function _loadVersionHistory() {
           <button class="version-notes-btn" title="View release notes">Notes</button>
         </div>`;
 
-      // DMG/ZIP download dropdown
-      const dlWrap = row.querySelector('.version-dl-wrap');
+      // DMG download button — opens the .dmg asset or release page
       const installBtn = row.querySelector('.version-install-btn');
-      if (installBtn && dlWrap) {
-        installBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          // Remove any existing dropdown
-          document.querySelectorAll('.version-dl-menu').forEach(m => m.remove());
-
-          const menu = document.createElement('div');
-          menu.className = 'version-dl-menu';
-
-          // .dmg link
-          if (r.dmgUrl) {
-            const dmgItem = document.createElement('div');
-            dmgItem.className = 'version-dl-item';
-            dmgItem.innerHTML = `<span class="version-dl-icon">💿</span><div><div class="version-dl-name">.dmg Installer</div><div class="version-dl-hint">macOS installer (Apple Silicon)</div></div>`;
-            dmgItem.addEventListener('click', () => { window.electronAPI.openExternal(r.dmgUrl); menu.remove(); });
-            menu.appendChild(dmgItem);
+      if (installBtn) {
+        installBtn.addEventListener('click', () => {
+          const url = r.dmgUrl || r.htmlUrl || '';
+          if (url) {
+            window.electronAPI.openExternal(url);
           }
-
-          // .zip link
-          if (r.zipUrl) {
-            const zipItem = document.createElement('div');
-            zipItem.className = 'version-dl-item';
-            zipItem.innerHTML = `<span class="version-dl-icon">📦</span><div><div class="version-dl-name">.zip Archive</div><div class="version-dl-hint">Portable zip archive</div></div>`;
-            zipItem.addEventListener('click', () => { window.electronAPI.openExternal(r.zipUrl); menu.remove(); });
-            menu.appendChild(zipItem);
-          }
-
-          // GitHub release page fallback
-          if (r.htmlUrl) {
-            const ghItem = document.createElement('div');
-            ghItem.className = 'version-dl-item';
-            ghItem.innerHTML = `<span class="version-dl-icon">🔗</span><div><div class="version-dl-name">GitHub Release</div><div class="version-dl-hint">View all assets on GitHub</div></div>`;
-            ghItem.addEventListener('click', () => { window.electronAPI.openExternal(r.htmlUrl); menu.remove(); });
-            menu.appendChild(ghItem);
-          }
-
-          // No assets fallback
-          if (!r.dmgUrl && !r.zipUrl && !r.htmlUrl) {
-            menu.innerHTML = '<div style="padding:8px 12px;color:var(--text-dim);font-size:10px">No downloads available</div>';
-          }
-
-          dlWrap.appendChild(menu);
-
-          // Close on outside click
-          setTimeout(() => {
-            const close = (ev) => { if (!menu.contains(ev.target) && ev.target !== installBtn) { menu.remove(); document.removeEventListener('click', close); } };
-            document.addEventListener('click', close);
-          }, 0);
         });
       }
 
@@ -707,7 +662,8 @@ function _loadVersionHistory() {
   });
 }
 
-// ─── Update Banner ───────────────────────────────────────────────────────────
+
+// ─── Update Banner & Changelog (shared, used by IPC handlers) ──────────────
 // Reusable — called from IPC handler AND from initSettingsPanel
 function _applyUpdateBanner() {
   const info = state._updateAvailable;
@@ -830,3 +786,6 @@ async function _showChangelog(version) {
     if (body) body.innerHTML = '<div style="color:var(--red);padding:20px;text-align:center">Could not fetch release notes</div>';
   }
 }
+
+
+
