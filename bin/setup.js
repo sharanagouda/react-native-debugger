@@ -278,12 +278,20 @@ async function install(projectDir) {
     process.exit(1);
   }
 
-  // Read SDK, patch HOST
+  // Read SDK, patch HOST_OVERRIDE for real device support
+  // The SDK auto-detects Android emulator vs iOS simulator at runtime.
+  // For real devices, we set HOST_OVERRIDE to the Mac's LAN IP.
   let sdkContent = fs.readFileSync(sdkSrc, 'utf8');
-  sdkContent = sdkContent.replace(
-    /const HOST = '[^']+';/,
-    `const HOST = '${host}';`
-  );
+  const isRealDevice = reason.includes('device') || reason.includes('LAN IP');
+  if (isRealDevice && host !== '127.0.0.1' && host !== '10.0.2.2') {
+    sdkContent = sdkContent.replace(
+      /const HOST_OVERRIDE = null;/,
+      `const HOST_OVERRIDE = '${host}';`
+    );
+    log('HOST_OVERRIDE set to', C.bold + host + C.reset, '(real device LAN IP)');
+  } else {
+    log('HOST auto-detect enabled', C.dim + '(Android: 10.0.2.2, iOS: 127.0.0.1)' + C.reset);
+  }
   try {
     fs.writeFileSync(sdkDest, sdkContent);
   } catch (e) {

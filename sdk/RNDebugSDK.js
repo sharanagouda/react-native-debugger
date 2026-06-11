@@ -19,8 +19,20 @@ if (typeof __DEV__ === 'undefined' || !__DEV__) {
 } else {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-// Android emulator → 10.0.2.2  |  iOS sim → 127.0.0.1  |  Device → your LAN IP
-const HOST = '10.0.2.2';
+// Auto-detect platform: Android emulator → 10.0.2.2  |  iOS sim → 127.0.0.1
+// For real devices: Android uses adb reverse (so 10.0.2.2 works via port forwarding),
+// iOS real device needs the Mac's LAN IP — override HOST_OVERRIDE below if needed.
+const HOST_OVERRIDE = null; // Set to your Mac's LAN IP for iOS real device, e.g. '192.168.1.100'
+
+function _detectHost() {
+  if (HOST_OVERRIDE) return HOST_OVERRIDE;
+  try {
+    const { Platform } = require('react-native');
+    if (Platform.OS === 'android') return '10.0.2.2';
+    return '127.0.0.1'; // iOS simulator
+  } catch { return '127.0.0.1'; }
+}
+const HOST = _detectHost();
 
 const PORTS = {
   NETWORK_AND_CONSOLE: 9092, // unified feed for network + console
