@@ -181,6 +181,7 @@ function findStoreFile(projectDir) {
   ];
   const storeNames = ['store.ts', 'store.js', 'store.tsx', 'store.jsx', 'index.ts', 'index.js', 'index.tsx'];
 
+  // 1. Check common store file locations
   for (const dir of searchDirs) {
     for (const name of storeNames) {
       const p = path.join(projectDir, dir, name);
@@ -193,16 +194,28 @@ function findStoreFile(projectDir) {
     }
   }
 
-  // Deep search: recursively find any file with configureStore/createStore
+  // 2. Check App.tsx / App.js (common pattern: store created in root component)
+  const rootAppFiles = ['src/App.tsx', 'src/App.js', 'App.tsx', 'App.js', 'app/App.tsx', 'app/App.js'];
+  for (const f of rootAppFiles) {
+    const p = path.join(projectDir, f);
+    if (fileExists(p)) {
+      const content = fs.readFileSync(p, 'utf8');
+      if (content.includes('configureStore') || content.includes('createStore')) {
+        return f;
+      }
+    }
+  }
+
+  // 3. Deep search: recursively find ANY file with configureStore/createStore
   try {
     const glob = (dir, depth) => {
       if (depth > 4) return null;
       let entries;
       try { entries = fs.readdirSync(path.join(projectDir, dir), { withFileTypes: true }); } catch { return null; }
       for (const e of entries) {
-        if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+        if (e.name === 'node_modules' || e.name.startsWith('.') || e.name === 'debug') continue;
         const rel = path.join(dir, e.name);
-        if (e.isFile() && /\.(ts|js|tsx|jsx)$/.test(e.name) && /store/i.test(e.name)) {
+        if (e.isFile() && /\.(ts|js|tsx|jsx)$/.test(e.name)) {
           const content = fs.readFileSync(path.join(projectDir, rel), 'utf8');
           if (content.includes('configureStore') || content.includes('createStore')) {
             return rel;
@@ -383,12 +396,51 @@ ${SDK_MARKER_END}
              warn('Could not auto-patch', storeFile, '— wire Redux manually');
            }
          }
-       } else if (storeContent.includes('createStore')) {
-         warn('Legacy createStore found at', C.bold + storeFile + C.reset);
-         console.log(C.dim + '    Add manually:' + C.reset);
-         console.log(C.dim + `      import { reduxEnhancer } from '${relSDK}';` + C.reset);
-         console.log(C.dim + '      const store = createStore(reducer, __DEV__ ? reduxEnhancer : undefined);' + C.reset);
-       }
+        } else if (storeContent.includes('createStore')) {
+          // Legacy createStore — try to auto-patch by adding reduxMiddleware to middleware array
+          let patched = storeContent;
+          let didPatch = false;
+
+          // Pattern 1: middleware array exists — push reduxMiddleware into it
+          // e.g. const middleware = []; or const middleware = [sagaMiddleware];
+          if (/(?:const|let|var)\s+middleware\s*=\s*\[/.test(storeContent) && !storeContent.includes('reduxMiddleware') && !storeContent.includes('RNDebugSDK')) {
+            // Add the require + push after the middleware array declaration
+            patched = patched.replace(
+              /((?:const|let|var)\s+middleware\s*=\s*\[[^\]]*\];?)/,
+              `$1\n  if (__DEV__) { try { const { reduxMiddleware } = require('${relSDK}'); if (reduxMiddleware) middleware.push(reduxMiddleware); } catch {} }`
+            );
+            if (patched !== storeContent) {
+              didPatch = true;
+            }
+          }
+
+          // Pattern 2: applyMiddleware(...middleware) exists but no middleware array — inject inline
+          if (!didPatch && storeContent.includes('applyMiddleware') && !storeContent.includes('reduxMiddleware') && !storeContent.includes('RNDebugSDK')) {
+            // Find the if (__DEV__) block near middleware setup and add there
+            // Or add before the createStore call
+            const createStoreMatch = storeContent.match(/createStore\s*\(/);
+            if (createStoreMatch) {
+              const idx = storeContent.indexOf(createStoreMatch[0]);
+              const insertPoint = storeContent.lastIndexOf('\n', idx);
+              if (insertPoint > 0) {
+                patched = storeContent.slice(0, insertPoint) +
+                  `\n  if (__DEV__) { try { const { reduxMiddleware } = require('${relSDK}'); if (reduxMiddleware) middleware.push(reduxMiddleware); } catch {} }` +
+                  storeContent.slice(insertPoint);
+                if (patched !== storeContent) didPatch = true;
+              }
+            }
+          }
+
+          if (didPatch) {
+            fs.writeFileSync(storePath, patched);
+            log('Patched', C.bold + storeFile + C.reset, '— Redux middleware wired (legacy createStore)');
+          } else {
+            warn('Legacy createStore found at', C.bold + storeFile + C.reset);
+            console.log(C.dim + '    Could not auto-patch. Add manually:' + C.reset);
+            console.log(C.dim + `      if (__DEV__) { try { const { reduxMiddleware } = require('${relSDK}'); middleware.push(reduxMiddleware); } catch {} }` + C.reset);
+            console.log(C.dim + '    Add this BEFORE the createStore() call in your middleware setup.' + C.reset);
+          }
+        }
      } else {
        warn('Redux detected but store file not found automatically');
        console.log(C.dim + '    Add to your store setup:' + C.reset);
