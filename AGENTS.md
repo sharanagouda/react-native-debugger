@@ -1,8 +1,10 @@
 # ReactoRadar — Architecture & Coding Rules
 
-> **Read this file before making ANY code changes.**
+> **Read this file COMPLETELY before making ANY code changes.**
 > This document defines the architecture, panel ownership, state contracts, and rules
 > that must be followed to avoid breaking existing functionality.
+>
+> **NEVER release without passing the Pre-Release Checklist at the bottom.**
 
 ---
 
@@ -27,7 +29,7 @@
 | `panels/performance.js` | Performance + Memory panels — `perfState`, `handlePerfEvent`, `handleMemoryEvent`, `initMemoryPanel` |
 | `panels/native.js` | Native Logs panel — `_nativeState`, `initNativeLogsPanel`, `_appendNativeLog` |
 | `panels/react.js` | React Tree panel — just a connect button |
-| `panels/sources.js` | Sources panel — Metro source file browser |
+| `panels/sources.js` | Sources panel — Metro source file browser (NOT initialized by default — no `panel-sources` in HTML) |
 | `init.js` | **Boot script** (loaded LAST) — IPC wiring, button handlers, memory monitor, settings apply, panel init calls |
 
 ### Other
@@ -40,7 +42,7 @@
 
 ### Script Load Order (critical)
 ```
-1. app.js          — state, $, esc, ts, clearAll, freeMemory (no panel dependencies)
+1. app.js            — state, $, esc, ts, clearAll, freeMemory (no panel dependencies)
 2. panels/settings.js — TAB_CONFIG, isTabEnabled, localStorage helpers (used by all panels)
 3. panels/console.js  — createTreeNode, showContextMenu, addConsoleLog (used by other panels)
 4. panels/network.js  — depends on: console.js (showToast, showContextMenu, createTreeNode)
@@ -56,120 +58,119 @@
 
 ---
 
-## Critical Rule: Do NOT Break Other Panels
+## Current Working State (v1.6.10)
 
-**Every panel is currently in a single `app.js` file.** Changes to one panel can silently
-break another. Before making any change, check:
+> **This section documents exactly what works. Any change MUST preserve all of this.**
 
-1. **Shared state** — Is the variable you're touching read/written by other panels?
-2. **Shared functions** — Is the function you're modifying called from other panels?
-3. **IPC listeners** — The preload `on()` method calls `removeAllListeners(channel)`.
-   Registering the same channel twice **kills the first listener**.
-4. **Array sync** — `state.redux.actions` and `state.redux.states` MUST have the same length.
-   Never empty one without emptying the other.
+### Panel Status
 
----
+| Panel | Status | Init Function | File | DOM ID |
+|-------|--------|---------------|------|--------|
+| Console | WORKING | `initConsolePanel()` | `panels/console.js` | `panel-console` |
+| Network | WORKING | `initNetworkPanel()` | `panels/network.js` | `panel-network` |
+| Redux | WORKING | `initReduxPanel()` | `panels/redux.js` | `panel-redux` |
+| GA4 Events | WORKING | `initGA4Panel()` | `panels/ga4.js` | `panel-ga4` |
+| AsyncStorage | WORKING | `initStoragePanel()` | `panels/storage.js` | `panel-storage` |
+| Performance | WORKING | `initPerformancePanel()` | `panels/performance.js` | `panel-performance` |
+| Memory | WORKING | `initMemoryPanel()` | `panels/performance.js` | `panel-memory` |
+| Native Logs | WORKING | `initNativeLogsPanel()` | `panels/native.js` | `panel-native` |
+| React Tree | WORKING | `initReactPanel()` | `panels/react.js` | `panel-react` |
+| Settings | WORKING | `initSettingsPanel()` | `panels/settings.js` | `panel-settings` |
+| Sources | NOT INITIALIZED | `initSourcesPanel()` | `panels/sources.js` | NO DOM element — `panel-sources` does NOT exist in `index.html` |
 
-## Panels — Ownership & State
+### Init Sequence (in `init.js`)
+```
+initConsolePanel();
+initNetworkPanel();
+initGA4Panel();
+initPerformancePanel();
+initMemoryPanel();
+initReduxPanel();
+initStoragePanel();
+initReactPanel();
+initNativeLogsPanel();
+initSettingsPanel();
+```
+**`initSourcesPanel()` is NOT called — intentional. No DOM element exists for it.**
 
-### Console Panel
-- **Init:** `initConsolePanel()` (app.js)
-- **State owned:**
-  - `state.console.logs` — array of log entries
-  - `state.console.levelFilters` — `{log, info, warn, error, debug}` booleans
-  - `state.console.searchFilter` — string
-  - `state.console.showRedux` — boolean (show redux actions in console)
-  - `_consolePending` — batch queue for rAF rendering
-  - `_consoleRAF` — pending requestAnimationFrame ID
-  - `_lastLogMsg`, `_lastLogRow`, `_lastLogCount` — log grouping state
-- **IPC channels:** `console-event` (line 921)
-- **Key functions:** `addConsoleLog()`, `flushConsoleBatch()`, `renderConsole()`, `buildLogRow()`, `buildLogBody()`
-- **Cross-panel dependency:** Called by Redux (`handleReduxEvent` → `addConsoleLog`)
-- **Constants:** `MAX_CONSOLE_LOGS = 5000`
+### IPC Channels Currently Registered (in `init.js`)
+All inside `if (window.electronAPI) { }` block:
+```
+ports, cdp-targets, redux-event, network-event, storage-event,
+console-event, ga4-event, perf-event, clear-all-ui,
+device-all-disconnected, redux-connected, network-connected,
+storage-connected, react-dt-status, focus-search, app-version,
+update-available, update-downloaded, trigger-open-cdp, theme-changed
+```
+Native panel registers `native-log` and `native-status` inside `initNativeLogsPanel()`.
 
-### Network Panel
-- **Init:** `initNetworkPanel()` (app.js)
-- **State owned:**
-  - `state.network.requests` — `{id: requestObj}` map
-  - `state.network.order` — array of request IDs
-  - `state.network.selectedId`, `statusFilter`, `typeFilter`, `searchFilter`, `throttle`, `enabled`, `sortCol`, `sortDir`
-  - `_netRAF` — pending requestAnimationFrame ID
-- **IPC channels:** `network-event` (line 357)
-- **Key functions:** `handleNetworkEvent()`, `renderNetwork()`, `buildNetRow()`, `selectNetRequest()`, `closeNetDetail()`
-- **Cross-panel dependency:** Calls `addConsoleLog()` for error toasts; calls `showToast()`
-- **Constants:** `NET_COLS` (column definitions)
+### SDK Platform Detection
+The SDK (`sdk/RNDebugSDK.js`) auto-detects the platform at runtime:
+- **Android emulator** → `10.0.2.2` (requires `adb reverse` on ports 9090, 9091, 9092, 8097)
+- **iOS simulator** → `127.0.0.1`
+- **Real device** → Set `HOST_OVERRIDE` in SDK to Mac's LAN IP
+- Detection uses `require('react-native').Platform.OS`
 
-### Redux Panel
-- **Init:** `initReduxPanel()` (app.js)
-- **State owned:**
-  - `state.redux.actions` — array of action entries
-  - `state.redux.states` — array of full state snapshots (**MUST be same length as actions**)
-  - `state.redux.selected` — selected action index (-1 = none)
-  - `state.redux.searchFilter`, `sortDir`
-  - `_reduxCatColors`, `_reduxColorIdx` — action category color cache
-- **IPC channels:** `redux-event` (line 356)
-- **Key functions:** `handleReduxEvent()`, `renderRedux()`, `_createHighlightedTree()`, `_deepEqual()`, `_findLeafChanges()`
-- **Cross-panel dependency:** Calls `addConsoleLog()` to mirror actions in console
-- **CRITICAL:** `actions` and `states` arrays must always be the same length. Never clear one without the other.
-- **Constants:** `MAX_REDUX_HISTORY = 500`
+### Setup Script (`bin/setup.js`) Behavior
+1. Copies `sdk/RNDebugSDK.js` → user's `src/debug/RNDebugSDK.js`
+2. Patches `index.js` to import SDK
+3. Store file detection order:
+   - Step 1: Common directories (`src/store/`, `src/redux/`, etc.) with filenames `store.*`, `index.*`
+   - Step 2: Root app files (`src/App.tsx`, `src/App.js`, `App.tsx`, `App.js`)
+   - Step 3: Deep recursive scan for files with `createStore(` or `configureStore(` call syntax
+4. Auto-patches RTK `configureStore` (adds middleware field)
+5. Auto-patches legacy `createStore` if `const middleware = [...]` pattern found
+6. Falls back to manual instructions if auto-patch fails
+7. Runs `adb reverse` for Android ports
+8. Only sets `HOST_OVERRIDE` for real device LAN IP; emulator/simulator uses auto-detect
 
-### GA4 Events Panel
-- **Init:** `initGA4Panel()` (app.js)
-- **State owned:**
-  - `ga4State` — standalone object: `{events, selected, searchFilter, sortDir, _raf}`
-  - `_ga4EventColors`, `_ga4ColorIdx` — event color cache
-- **IPC channels:** `ga4-event` (line 360)
-- **Key functions:** `handleGA4Event()`, `renderGA4List()`, `renderGA4Detail()`, `renderGA4Summary()`
-
-### Storage Panel
-- **Init:** `initStoragePanel()` (app.js)
-- **State owned:**
-  - `state.storage.entries` — `{key: value}` map
-  - `state.storage.keys` — ordered key array
-  - `state.storage.selected`, `searchFilter`
-  - `_storageRAF` — pending requestAnimationFrame ID
-- **IPC channels:** `storage-event` (line 358)
-- **Key functions:** `handleStorageEvent()`, `renderStorage()`, `renderStorageValue()`
-
-### Performance Panel
-- **Init:** `initPerformancePanel()` (app.js)
-- **State owned:**
-  - `perfState` — standalone object: `{fps, jsThread, uiThread, recording, data}`
-- **IPC channels:** `perf-event` (line 362, shared with Memory)
-- **Key functions:** `handlePerfEvent()`, `drawPerfGraph()`, `clearPerfCanvas()`
-
-### Memory Panel
-- **Init:** `initMemoryPanel()` (app.js)
-- **State owned:** None (displays live values from perf events)
-- **IPC channels:** `perf-event` (line 362, shared with Performance)
-- **Key functions:** `handleMemoryEvent()`
-
-### Native Logs Panel
-- **Init:** `initNativeLogsPanel()` (app.js)
-- **State owned:**
-  - `_nativeState` — standalone object: `{logs, connected, platform, levelFilter, searchFilter}`
-- **IPC channels:** `native-log`, `native-status` (registered inside init, lines 3429, 3440)
-- **Key functions:** `_clearNativeLogs()`, `_appendNativeLog()`, `_renderNativeLogs()`, `_autoDetectNative()`
-- **Constants:** `MAX_NATIVE_LOGS`
-
-### Settings Panel
-- **Init:** `initSettingsPanel()` (app.js)
-- **State owned:** All localStorage accessors (theme, font, app name, metro port, tab visibility, tab order, hidden URLs)
-- **Key functions:** `applyTheme()`, `applyFontSize()`, `applyFontFamily()`, `applyAppName()`, `applyTabVisibility()`, `_buildTabVisGrid()`, `_loadVersionHistory()`
-- **Constants:** `TAB_CONFIG`, `FONT_FAMILIES`
-
-### Sources Panel
-- **Init:** `initSourcesPanel()` (app.js)
-- **Key functions:** `fetchSourceFileList()`, `renderSourceFileList()`, `buildSourceTreeNode()`, `loadSourceFile()`
-
-### React Tree Panel
-- **Init:** `initReactPanel()` (app.js)
-- **Minimal** — just a connect button for React DevTools
+### Redux Integration Requirements
+- Connection to port 9090 ("RN app connected") does NOT mean events are flowing
+- `reduxMiddleware` or `reduxEnhancer` MUST be wired into the store
+- Events only flow when `store.dispatch()` goes through the middleware/enhancer
+- Thunk/function actions are safely serialized as `{type: "[Function: thunk]"}`
+- State > 1MB is truncated to `{__truncated: true, sizeBytes, keys}`
 
 ---
 
-## Shared Utilities — DO NOT MODIFY without checking all callers
+## Critical Rules — DO NOT VIOLATE
 
+### 1. Every init function MUST have a null guard
+```js
+function initXxxPanel() {
+  const panel = $('panel-xxx');
+  if (!panel) return;  // ← REQUIRED — prevents crash if DOM element is missing
+  panel.innerHTML = `...`;
+}
+```
+
+### 2. Redux arrays MUST stay in sync
+`state.redux.actions` and `state.redux.states` MUST have the same length.
+Never empty one without emptying the other. In `freeMemory()`, always trim both together.
+
+### 3. IPC channels MUST be in preload allowlist
+Every new IPC channel MUST be added to the `allowed` array in `preload.js`.
+If a channel is not in this array, the listener is **silently dropped** — no error, no warning.
+
+### 4. IPC listeners MUST NOT be registered twice
+The preload `on()` method calls `removeAllListeners(channel)` before adding.
+Registering the same channel twice **kills the first listener**.
+ALL IPC listeners go in `init.js` inside the `if (window.electronAPI) {}` block — nowhere else.
+
+### 5. CSS variables — use ONLY defined variables
+Themes define: `--bg`, `--bg2`, `--bg3`, `--bg4` (NOT `--bg1`)
+`--text`, `--text-mid`, `--text-dim`, `--text-bright`
+`--accent`, `--accent2`, `--border`, `--border2`
+`--green`, `--yellow`, `--red`
+**Never use `--bg1`** — it resolves to transparent/empty.
+
+### 6. clearAll() and freeMemory() — check ALL panels
+- `clearAll()` wipes everything + re-renders — used for Cmd+K
+- `freeMemory()` trims heavy data without clearing UI — used on disconnect/quit
+- After modifying either, verify ALL panels still render correctly
+- Cancel pending `requestAnimationFrame` IDs before clearing data
+
+### 7. Shared functions — check ALL callers before modifying
 | Function | Used By |
 |----------|---------|
 | `$(id)` | Every panel |
@@ -178,75 +179,76 @@ break another. Before making any change, check:
 | `collectEntries(val)` | `objPreview()`, `createTreeNode()` |
 | `objPreview(val)` | `createTreeNode()` |
 | `createTreeNode(key, val, collapsed)` | Console, Network, Redux, Storage, GA4 |
-| `createPrimitiveSpan(val)` | `createTreeNode()`, `renderConsoleArg()` |
 | `showContextMenu(e, items)` | Console, Network, Redux, Storage, GA4, Native |
-| `clearAll()` | IPC `clear-all-ui`, memory warning |
-| `freeMemory()` | IPC `device-all-disconnected` (debounced) |
-| `clearActiveTab()` | Keyboard shortcut Cmd+K |
+| `addConsoleLog(entry)` | Console IPC, Redux (`handleReduxEvent`), Network (error toasts) |
 | `isTabEnabled(tabId)` | Redux, GA4, Storage, Native, Performance |
 | `formatSize(bytes)` | Storage, Network, Memory |
-| `switchPanel(panel)` | Navigation, tab visibility, toasts |
-| `updateDeviceBanner(service, on)` | IPC connection handlers |
-| `showToast(msg, type, panel)` | Network |
+
+### 8. package.json `files` field MUST include all runtime files
+Current required entries:
+```json
+"files": ["main.js", "preload.js", "index.html", "app.js", "init.js", "panels/", "styles.css", "sdk/", "bin/", "assets/", "AGENTS.md"]
+```
+**If you add a new file, add it here or it won't be published to npm.**
 
 ---
 
-## IPC Channel Registry
+## Panels — Ownership & State
 
-### Renderer listens (app.js → via preload allowlist)
+### Console Panel (`panels/console.js`)
+- **State:** `state.console.logs`, `state.console.levelFilters`, `state.console.searchFilter`, `state.console.showRedux`
+- **Private state:** `_consolePending`, `_consoleRAF`, `_lastLogMsg`, `_lastLogRow`, `_lastLogCount`
+- **IPC:** `console-event` → `addConsoleLog()`
+- **Cross-panel:** Called by Redux (`handleReduxEvent` → `addConsoleLog`)
+- **Constants:** `MAX_CONSOLE_LOGS = 5000`
 
-| Channel | Handler | Panel |
-|---------|---------|-------|
-| `ports` | Sets `state.ports` | Global |
-| `cdp-targets` | Updates CDP button | Global |
-| `redux-event` | `handleReduxEvent` | Redux |
-| `network-event` | `handleNetworkEvent` | Network |
-| `storage-event` | `handleStorageEvent` | Storage |
-| `console-event` | `addConsoleLog` | Console |
-| `ga4-event` | `handleGA4Event` | GA4 |
-| `perf-event` | `handlePerfEvent` + `handleMemoryEvent` | Perf + Memory |
-| `redux-connected` | `updateDeviceBanner` + cancel disconnect timer | Global |
-| `network-connected` | `updateDeviceBanner` + cancel disconnect timer | Global |
-| `storage-connected` | `updateDeviceBanner` + cancel disconnect timer | Global |
-| `react-dt-status` | `updateDeviceBanner` | Global |
-| `clear-all-ui` | `clearAll()` | Global |
-| `device-all-disconnected` | debounced `freeMemory()` | Global |
-| `app-version` | Sets `state._appVersion`, `state._isPackaged` | Settings |
-| `update-available` | `_applyUpdateBanner()` | Settings |
-| `update-downloaded` | `_applyUpdateBanner()` | Settings |
-| `trigger-open-cdp` | Opens CDP | Global |
-| `theme-changed` | Applies theme | Settings |
-| `focus-search` | Focuses active panel search | Global |
-| `native-log` | Appends native log | Native (registered inside init) |
-| `native-status` | Updates native connection status | Native (registered inside init) |
+### Network Panel (`panels/network.js`)
+- **State:** `state.network.requests`, `state.network.order`, `state.network.selectedId`, `statusFilter`, `typeFilter`, `searchFilter`, `sortCol`, `sortDir`
+- **Private state:** `_netRAF`
+- **IPC:** `network-event` → `handleNetworkEvent()`
+- **Cross-panel:** Calls `addConsoleLog()`, `showToast()`, `showContextMenu()`
 
-### Preload allowlist (preload.js)
+### Redux Panel (`panels/redux.js`)
+- **State:** `state.redux.actions`, `state.redux.states` (MUST be same length), `state.redux.selected`
+- **IPC:** `redux-event` → `handleReduxEvent()`
+- **Cross-panel:** Calls `addConsoleLog()` to mirror actions in console
+- **Constants:** `MAX_REDUX_HISTORY = 500`
 
-**Every new IPC channel MUST be added to the `allowed` array in `preload.js` line 10-14.**
-If a channel is not in this array, the listener is silently dropped — no error, no warning.
+### GA4 Events Panel (`panels/ga4.js`)
+- **State:** `ga4State` standalone object
+- **IPC:** `ga4-event` → `handleGA4Event()`
 
-### Main process sends (main.js)
+### AsyncStorage Panel (`panels/storage.js`)
+- **State:** `state.storage.entries`, `state.storage.keys`, `state.storage.selected`
+- **Private state:** `_storageRAF`
+- **IPC:** `storage-event` → `handleStorageEvent()`
 
-| Channel | Sent from |
-|---------|-----------|
-| `redux-event` | `startBridge` callback for Redux bridge (port 9090) |
-| `network-event` | `startBridge` callback for Network bridge (port 9092) |
-| `storage-event` | `startBridge` callback for Storage bridge (port 9091) |
-| `console-event` | `startBridge` callback for Network bridge (type=console) |
-| `perf-event` | `startBridge` callback for Network bridge (type=perf) |
-| `ga4-event` | `startBridge` callback for Network bridge (type=ga4) |
-| `*-connected` | `startBridge` on WS connect/disconnect |
-| `device-all-disconnected` | `startBridge` when all 3 bridges have 0 clients |
-| `clear-all-ui` | Menu Cmd+K handler |
-| `app-version` | `createMainWindow` on `did-finish-load` |
-| `native-log` | Native log process stdout parser |
-| `native-status` | Native log start/stop/error |
+### Performance Panel (`panels/performance.js`)
+- **State:** `perfState` standalone object
+- **IPC:** `perf-event` → `handlePerfEvent()`
+
+### Memory Panel (`panels/performance.js`)
+- **IPC:** `perf-event` → `handleMemoryEvent()` (shared channel with Performance)
+
+### Native Logs Panel (`panels/native.js`)
+- **State:** `_nativeState` standalone object
+- **IPC:** `native-log`, `native-status` (registered inside `initNativeLogsPanel`, NOT in init.js)
+- **Constants:** `MAX_NATIVE_LOGS = 2000`
+
+### Settings Panel (`panels/settings.js`)
+- **State:** All localStorage accessors
+- **Shared utilities:** `TAB_CONFIG`, `isTabEnabled()`, `applyTheme()`, `getTabVisibility()`, `applyTabVisibility()`
+
+### React Tree Panel (`panels/react.js`)
+- Minimal — just a connect button for React DevTools
+
+### Sources Panel (`panels/sources.js`)
+- **NOT INITIALIZED** — `panel-sources` does not exist in `index.html`
+- `initSourcesPanel()` has a null guard and returns early
 
 ---
 
-## Main Process (main.js) — Structure
-
-### WebSocket Bridges
+## WebSocket Bridges (main.js)
 
 | Port | Name | Client Set | Events Carried |
 |------|------|------------|----------------|
@@ -260,82 +262,103 @@ If a channel is not in this array, the listener is silently dropped — no error
 2. Destroy `devtoolsWindow`
 3. Close `reactDTServer` + clients
 4. Close all bridge servers + clients
-5. Kill `_nativeLogProcess` (second `before-quit` handler inside `setupIPC`)
+5. Kill `_nativeLogProcess`
 
 ---
 
 ## Rules for Making Changes
 
-### 1. Adding a new panel
-- Add init function: `initXxxPanel()`
-- Add to `TAB_CONFIG` array
-- Add to init sequence at bottom of app.js
-- Add state to `clearAll()` and `freeMemory()` if the panel stores data
-- Add case to `clearActiveTab()` if the panel has clearable data
+### Adding a new panel
+1. Create `panels/newpanel.js` with `function initNewPanel() { const panel = $('panel-new'); if (!panel) return; ... }`
+2. Add `<div id="panel-new" class="panel"></div>` to `index.html`
+3. Add `<script src="panels/newpanel.js"></script>` to `index.html` BEFORE `init.js`
+4. Add `initNewPanel();` to `init.js` init sequence
+5. Add to `TAB_CONFIG` array in `panels/settings.js`
+6. Add state to `clearAll()` and `freeMemory()` in `app.js`
+7. Add case to `clearActiveTab()` in `app.js`
 
-### 2. Adding a new IPC channel
-- Add `ipcMain.on/handle` in `main.js` `setupIPC()`
-- Add channel name to `preload.js` allowed array (line 10-14)
-- Add `window.electronAPI.on()` in app.js or expose send method in preload
-- **Test:** Verify the listener fires by adding a `console.log` in the handler
+### Adding a new IPC channel
+1. Add `ipcMain.on/handle` in `main.js` `setupIPC()`
+2. Add channel name to `preload.js` allowed array
+3. Add `window.electronAPI.on()` in `init.js` inside the `if (window.electronAPI)` block
+4. **Test:** Verify the listener fires
 
-### 3. Modifying shared state
-- Check all panels that read/write the field (see tables above)
-- **Redux arrays:** `actions` and `states` must stay in sync
-- **rAF IDs:** Cancel with `cancelAnimationFrame()` before clearing data
-- **freeMemory():** Only trim, never wipe arrays that other panels index into
-
-### 4. Modifying clearAll() or freeMemory()
-- `clearAll()` wipes everything + re-renders — used for explicit user action (Cmd+K)
-- `freeMemory()` trims heavy data without clearing UI — used on disconnect/quit
-- After modifying either, verify ALL panels still render correctly
-- Test: Cmd+K clears all panels, device disconnect doesn't break subsequent events
-
-### 5. Modifying the object tree renderer
-- `collectEntries()`, `objPreview()`, `createTreeNode()` are used by Console, Network, Redux, Storage, GA4
-- **Any change to these functions affects ALL panels** that render object trees
-- `_createHighlightedTree()` in Redux is a SEPARATE tree renderer — changes to `createTreeNode` do NOT automatically apply to Redux diff trees
-
-### 6. CSS variable naming
-- Themes define: `--bg`, `--bg2`, `--bg3`, `--bg4` (NOT `--bg1`)
-- `--text`, `--text-mid`, `--text-dim`, `--text-bright`
-- `--accent`, `--accent2`, `--border`, `--border2`
-- `--green`, `--yellow`, `--red`
-- **Never use undefined variables** — the value resolves to transparent/empty
+### Modifying the SDK
+1. Test on BOTH Android emulator AND iOS simulator
+2. Verify `adb reverse` works for Android
+3. Test hot reload — ensure no timer/WebSocket leaks
+4. Test with Redux Thunk actions (function dispatches)
+5. Test with large Redux state (>1MB)
+6. Test with binary network responses (images, videos)
 
 ---
 
-## SDK Integration (in user's React Native app)
+## Pre-Release Checklist
 
-The SDK (`RNDebugSDK.js`) has two parts:
-1. **Auto-connect** — WebSocket connections to ports 9090/9091/9092 open on import
-2. **Manual wiring** — Redux requires adding `reduxMiddleware` or `reduxEnhancer` to the store
+> **MANDATORY — Do NOT publish without passing ALL checks.**
 
-`npx reactoradar setup` handles:
-- Copying SDK to `src/debug/RNDebugSDK.js`
-- Patching entry file (`index.js`) to import SDK
-- Auto-patching RTK `configureStore` with middleware
-- **Legacy `createStore`**: Only prints manual instructions (does NOT auto-patch)
+### Automated Checks (run these commands)
+```bash
+# 1. Syntax check all files
+for f in app.js init.js main.js preload.js panels/*.js sdk/RNDebugSDK.js bin/setup.js; do
+  node -c "$f" || echo "FAIL: $f"
+done
 
-If Redux is not working:
-1. Check if `reduxMiddleware` or `reduxEnhancer` is wired into the store
-2. Connection to port 9090 ("RN app connected") does NOT mean events are flowing
-3. Events only flow when `store.dispatch()` goes through the middleware/enhancer
+# 2. No duplicate functions
+grep -rhn "^function [a-zA-Z_]" app.js init.js panels/*.js | sed 's/(.*//' | sort | uniq -c | sort -rn | awk '$1 > 1'
+
+# 3. No duplicate top-level variables
+grep -rhn "^const [a-zA-Z_]\|^let [a-zA-Z_]" app.js init.js panels/*.js | sed 's/ =.*//' | sort | uniq -c | sort -rn | awk '$1 > 1'
+
+# 4. All critical functions exist
+for fn in handleReduxEvent handleNetworkEvent handleStorageEvent handleGA4Event handlePerfEvent handleMemoryEvent clearAll freeMemory updateDeviceBanner initConsolePanel initNetworkPanel initGA4Panel initPerformancePanel initMemoryPanel initReduxPanel initStoragePanel initReactPanel initNativeLogsPanel initSettingsPanel addConsoleLog renderConsole renderNetwork renderRedux renderStorage renderGA4List closeNetDetail clearPerfCanvas showContextMenu createTreeNode isTabEnabled formatSize showToast takeScreenshot collectEntries _applyUpdateBanner _showChangelog; do
+  found=$(grep -rln "function $fn\b" app.js init.js panels/*.js 2>/dev/null | head -1)
+  [ -z "$found" ] && echo "MISSING: $fn"
+done
+
+# 5. npm pack includes all files
+npm pack --dry-run 2>&1 | grep -c "panels/\|init.js\|sdk/\|bin/"
+# Expected: 15+ files
+
+# 6. IPC channels all in preload allowlist
+# Every channel registered in init.js must be in preload.js allowed array
+```
+
+### Manual Checks (test in the running app)
+- [ ] **App launches** — `npm start` opens the window, no blank screen
+- [ ] **Console** — logs appear, level filters work, search works, Cmd+K clears
+- [ ] **Network** — requests appear, detail panel opens/closes, search works, Cmd+K clears
+- [ ] **Redux** — actions appear, state diff shows correctly, Cmd+K clears, works after disconnect/reconnect
+- [ ] **GA4** — events appear, summary tab works, color toggle works
+- [ ] **Storage** — keys appear, values render, search works
+- [ ] **Performance** — Record button toggles, graphs render when data arrives
+- [ ] **Memory** — heap values display when device connected
+- [ ] **Native Logs** — Connect button works for Android/iOS, logs stream, Cmd+K clears
+- [ ] **Settings** — theme switch works, font size changes, tab visibility toggles, version history loads
+- [ ] **React Tree** — connect button shows
+- [ ] **Device disconnect** — `freeMemory()` fires after 3s, panels still work after reconnect
+- [ ] **Device reconnect** — cancel disconnect timer, new events flow immediately
+- [ ] **Cmd+K** — clears active tab data (test on each tab)
+- [ ] **All panels render** — switch through every tab, none show blank/white screen
+
+### SDK Checks (test in RN app)
+- [ ] **iOS simulator** — SDK connects with `127.0.0.1`, console/network/storage data flows
+- [ ] **Android emulator** — SDK connects with `10.0.2.2` (after `adb reverse`), all data flows
+- [ ] **Redux** — actions appear in Redux tab AND console (if showRedux enabled)
+- [ ] **Hot reload** — reload RN app, SDK reconnects, no duplicate data/timers
+
+### Setup Script Checks
+- [ ] `npx reactoradar setup` — copies SDK, patches index.js, detects store file
+- [ ] Redux auto-patch — adds `reduxMiddleware` to middleware array
+- [ ] `npx reactoradar remove` — cleans up SDK and patches
+- [ ] `adb reverse` — ports forwarded for Android
 
 ---
 
-## Testing Checklist (after any change)
+## Known Limitations
 
-- [ ] Console: logs appear, level filters work, search works, Cmd+K clears
-- [ ] Network: requests appear, detail panel opens, HAR export works
-- [ ] Redux: actions appear, state diff shows, Cmd+K clears
-- [ ] GA4: events appear, summary works, color toggle works
-- [ ] Storage: keys appear, values render, search works
-- [ ] Performance: FPS/JS/UI graphs render when recording
-- [ ] Memory: heap values appear
-- [ ] Native Logs: connect to adb/xcrun, logs stream, Cmd+K clears
-- [ ] Settings: theme switch, font size, tab visibility, version history loads
-- [ ] Device disconnect: `freeMemory()` fires after 3s, panels still work after reconnect
-- [ ] Device reconnect: cancel disconnect timer, new events flow immediately
-- [ ] Cmd+K: clears active tab (all tabs including native)
-- [ ] App quit: `devtoolsWindow` closed, bridges closed, no crash
+1. **Sources panel** — `panel-sources` div does not exist in `index.html`. `initSourcesPanel()` is not called. Panel is dormant.
+2. **`npx reactoradar setup` store detection** — if store is in an unusual file (not `App.tsx`, not `store.*`), setup may not find it
+3. **iOS real device** — requires manually setting `HOST_OVERRIDE` in the SDK
+4. **`adb reverse` drops** — if Android emulator restarts, `adb reverse` must be re-run
+5. **Performance `jsThread` metric** — currently uses `performance.now() % 16.67` which is approximate
