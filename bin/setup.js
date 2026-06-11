@@ -206,7 +206,8 @@ function findStoreFile(projectDir) {
     }
   }
 
-  // 3. Deep search: recursively find ANY file with configureStore/createStore
+  // 3. Deep search: recursively find files with actual createStore()/configureStore() calls
+  //    Skip files that merely reference configureStore as a parameter/type name
   try {
     const glob = (dir, depth) => {
       if (depth > 4) return null;
@@ -217,7 +218,8 @@ function findStoreFile(projectDir) {
         const rel = path.join(dir, e.name);
         if (e.isFile() && /\.(ts|js|tsx|jsx)$/.test(e.name)) {
           const content = fs.readFileSync(path.join(projectDir, rel), 'utf8');
-          if (content.includes('configureStore') || content.includes('createStore')) {
+          // Must contain actual call: configureStore({ or createStore( — not just the word as a type/param
+          if (/configureStore\s*\(/.test(content) || /createStore\s*\(/.test(content)) {
             return rel;
           }
         }
